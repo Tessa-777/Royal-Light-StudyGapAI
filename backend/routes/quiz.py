@@ -1,6 +1,8 @@
 from flask import Blueprint, current_app, jsonify, request
 
 from ..utils.validation import require_fields
+from ..utils.validate import validate_json
+from ..utils.schemas import StartQuizRequest, SubmitQuizRequest
 
 
 quiz_bp = Blueprint("quiz", __name__)
@@ -13,11 +15,20 @@ def _repo():
 
 @quiz_bp.get("/questions")
 def get_questions():
+	cache = current_app.extensions.get("cache")
+	key = f"questions:{int(request.args.get('total', 30))}"
+	if cache:
+		cached = cache.get(key)
+		if cached:
+			return jsonify(cached), 200
 	questions = _repo().get_diagnostic_questions(total=int(request.args.get("total", 30)))
+	if cache:
+		cache.set(key, questions, timeout=120)
 	return jsonify(questions), 200
 
 
 @quiz_bp.post("/quiz/start")
+@validate_json(StartQuizRequest)
 def start_quiz():
 	data = request.get_json(force=True) or {}
 	ok, missing = require_fields(data, ["userId"])
@@ -28,6 +39,7 @@ def start_quiz():
 
 
 @quiz_bp.post("/quiz/<quiz_id>/submit")
+@validate_json(SubmitQuizRequest)
 def submit_quiz(quiz_id: str):
 	data = request.get_json(force=True) or {}
 	ok, missing = require_fields(data, ["responses"])
@@ -57,8 +69,16 @@ def submit_quiz(quiz_id: str):
 @quiz_bp.get("/quiz/<quiz_id>/results")
 def quiz_results(quiz_id: str):
 	repo = _repo()
+	cache = current_app.extensions.get("cache")
+	key = f"quiz_results:{quiz_id}"
+	if cache:
+		cached = cache.get(key)
+		if cached:
+			return jsonify(cached), 200
 	try:
 		results = repo.get_quiz_results(quiz_id)
+		if cache:
+			cache.set(key, results, timeout=120)
 		return jsonify(results), 200
 	except KeyError:
 		return jsonify({"error": "not_found", "message": "Quiz not found"}), 404

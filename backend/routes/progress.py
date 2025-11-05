@@ -1,6 +1,8 @@
 from flask import Blueprint, current_app, jsonify, request
 
 from ..utils.validation import require_fields
+from ..utils.validate import validate_json
+from ..utils.schemas import AdjustPlanRequest
 
 
 progress_bp = Blueprint("progress", __name__)

@@ -43,6 +43,9 @@ class Repository:
 	def update_study_plan(self, plan_id: str, plan_data: Dict[str, Any]) -> Dict[str, Any]:
 		raise NotImplementedError
 
+	def get_study_plan(self, plan_id: str) -> Optional[Dict[str, Any]]:
+		raise NotImplementedError
+
 	# Progress
 	def get_user_progress(self, user_id: str) -> List[Dict[str, Any]]:
 		raise NotImplementedError

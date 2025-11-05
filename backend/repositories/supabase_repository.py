@@ -85,22 +85,36 @@ class SupabaseRepository(Repository):
 
 	# AI Diagnostics / Study Plans
 	def save_ai_diagnostic(self, diagnostic: Dict[str, Any]) -> Dict[str, Any]:
-		response = self.client.table("ai_diagnostics").insert(diagnostic).select("*").single().execute()
+		payload = {**diagnostic}
+		if "generated_at" not in payload:
+			from datetime import datetime, timezone
+			payload["generated_at"] = datetime.now(timezone.utc).isoformat()
+		response = self.client.table("ai_diagnostics").insert(payload).select("*").single().execute()
 		return response.data
 
 	def create_study_plan(self, plan: Dict[str, Any]) -> Dict[str, Any]:
-		response = self.client.table("study_plans").insert(plan).select("*").single().execute()
+		from datetime import datetime, timezone
+		now = datetime.now(timezone.utc).isoformat()
+		payload = {**plan}
+		payload.setdefault("created_at", now)
+		payload.setdefault("updated_at", now)
+		response = self.client.table("study_plans").insert(payload).select("*").single().execute()
 		return response.data
 
 	def update_study_plan(self, plan_id: str, plan_data: Dict[str, Any]) -> Dict[str, Any]:
+		from datetime import datetime, timezone
 		response = (
 			self.client.table("study_plans")
-			.update({"plan_data": plan_data})
+			.update({"plan_data": plan_data, "updated_at": datetime.now(timezone.utc).isoformat()})
 			.eq("id", plan_id)
 			.select("*")
 			.single()
 			.execute()
 		)
+		return response.data
+
+	def get_study_plan(self, plan_id: str) -> Optional[Dict[str, Any]]:
+		response = self.client.table("study_plans").select("*").eq("id", plan_id).maybe_single().execute()
 		return response.data
 
 	# Progress

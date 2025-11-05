@@ -61,6 +61,8 @@ def test_questions_and_quiz_flow():
 	assert res.status_code == 200
 	data = res.get_json()
 	assert data["quiz"]["correct_answers"] == 5
+	# responses should include id field per schema
+	assert all("id" in r for r in data["responses"])
 
 
 def test_ai_endpoints():
@@ -69,11 +71,12 @@ def test_ai_endpoints():
 	an = client.post("/api/ai/analyze-diagnostic", json={"userId": "u1", "quizId": "qz1", "responses": responses})
 	assert an.status_code == 200
 	analysis = an.get_json()
-	assert "analysis" in analysis
-	plan = client.post("/api/ai/generate-study-plan", json={"userId": "u1", "diagnosticId": analysis["id"], "weakTopics": analysis["analysis"]["weakTopics"], "targetScore": 250})
+	assert "weakTopics" in analysis
+	plan = client.post("/api/ai/generate-study-plan", json={"userId": "u1", "diagnosticId": "diag-1", "weakTopics": analysis["weakTopics"], "targetScore": 250, "weeksAvailable": 4})
 	assert plan.status_code == 201
 	study_plan = plan.get_json()
 	assert "plan_data" in study_plan
+	assert len(study_plan["plan_data"]["weeks"]) == 4
 	# explain answer
 	exp = client.post("/api/ai/explain-answer", json={"questionId": "q1", "studentAnswer": "B", "correctAnswer": "C", "studentReasoning": "I thought..."})
 	assert exp.status_code == 200

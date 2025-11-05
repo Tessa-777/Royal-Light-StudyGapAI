@@ -7,11 +7,19 @@ from .routes.quiz import quiz_bp
 from .routes.ai import ai_bp
 from .routes.progress import progress_bp
 from .routes.analytics import analytics_bp
+from flask_cors import CORS
 
 
 def create_app() -> Flask:
 	app = Flask(__name__)
 	app.config.from_object(AppConfig)
+	CORS(app, resources={r"/api/*": {"origins": os.getenv("CORS_ORIGINS", "*")}})
+
+	# Cache setup (simple in-memory)
+	from flask_caching import Cache
+	cache = Cache(config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": 60})
+	cache.init_app(app)
+	app.extensions["cache"] = cache
 
 	# Initialize repository singleton for in-memory mode
 	# Store it on app instance so it persists across requests

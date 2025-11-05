@@ -11,7 +11,14 @@ def _repo():
 
 @analytics_bp.get("/analytics/dashboard")
 def dashboard():
+	cache = current_app.extensions.get("cache")
+	if cache:
+		cached = cache.get("analytics:dashboard")
+		if cached:
+			return jsonify(cached), 200
 	data = _repo().get_analytics_dashboard()
+	if cache:
+		cache.set("analytics:dashboard", data, timeout=60)
 	return jsonify(data), 200
 
 

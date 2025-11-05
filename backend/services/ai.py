@@ -1,5 +1,8 @@
 import os
+import hashlib
+import json
 from typing import Any, Dict, List
+from flask import current_app
 
 try:
 	import google.generativeai as genai  # type: ignore
@@ -31,6 +34,15 @@ class AIService:
 		if self.mock:
 			return self._mock_analysis(responses)
 
+		# Caching by hash of responses
+		cache = current_app.extensions.get("cache") if current_app else None
+		cache_key = None
+		if cache:
+			cache_key = f"ai:analyze:{hashlib.sha256(json.dumps(responses, sort_keys=True).encode()).hexdigest()}"
+			cached = cache.get(cache_key)
+			if cached:
+				return cached
+
 		prompt = (
 			"You are an expert JAMB Mathematics tutor in Nigeria.\n\n"
 			"A student just completed a 30-question diagnostic quiz. Analyze their performance and identify:\n"
@@ -47,30 +59,48 @@ class AIService:
 		result = self.client.generate_content(prompt)
 		# Expect model to return JSON text
 		text = result.text if hasattr(result, "text") else str(result)
-		import json
+		result_json = json.loads(text)
+		if cache and cache_key:
+			cache.set(cache_key, result_json, timeout=300)
+		return result_json
 
-		return json.loads(text)
-
-	def generate_study_plan(self, weak_topics: List[Dict[str, Any]], target_score: int, current_score: int) -> Dict[str, Any]:
+	def generate_study_plan(self, weak_topics: List[Dict[str, Any]], target_score: int, current_score: int, weeks_available: int = 6) -> Dict[str, Any]:
 		if self.mock:
-			return {
-				"weeks": [
-					{"weekNumber": i + 1, "focus": "Foundations first", "topics": ["Algebra", "Number Theory"], "daily": [{"day": d + 1, "minutes": 40} for d in range(7)]}
-					for i in range(6)
-				]
-			}
+			weeks = []
+			for i in range(weeks_available):
+				weeks.append({
+					"weekNumber": i + 1,
+					"focus": "Foundations first" if i == 0 else "Progressive mastery",
+					"topics": [
+						{"topicId": "algebra", "topicName": "Algebra", "dailyGoals": "Practice 10 problems", "estimatedTime": "40 mins/day",
+						 "resources": [{"type": "video", "title": "Algebra Basics", "url": "https://example.com", "duration": 15}]},
+					],
+					"milestones": "Complete 50 practice problems" if i == 0 else "Take mini-quiz",
+					"daily": [{"day": d + 1, "minutes": 40} for d in range(7)],
+				})
+			return {"weeks": weeks}
+
+		# Cache by weak topics + params
+		cache = current_app.extensions.get("cache") if current_app else None
+		cache_key = None
+		if cache:
+			cache_key = f"ai:plan:{hashlib.sha256(json.dumps({"w": weak_topics, "t": target_score, "c": current_score, "n": weeks_available}, sort_keys=True).encode()).hexdigest()}"
+			cached = cache.get(cache_key)
+			if cached:
+				return cached
 
 		prompt = (
 			"You are a JAMB prep expert. Create a 6-week study plan for a student with these weak topics: "
-			f"{weak_topics}\n\nTarget score: {target_score}\nCurrent projected score: {current_score}\n\n"
+			f"{weak_topics}\n\nTarget score: {target_score}\nCurrent projected score: {current_score}\nWeeks available: {weeks_available}\n\n"
 			"Rules:\n- Start with foundational gaps FIRST\n- Build progressively (don't jump to advanced topics)\n- Each week should have 3-4 topics max\n- Include daily time estimates (30-45 mins/day)\n- Prioritize topics with highest JAMB weight\n\n"
-			"Return JSON structured as 6 weeks of daily study goals."
+			"Return JSON structured as N weeks of daily study goals with fields weekNumber, focus, topics[{topicId, topicName, dailyGoals, estimatedTime, resources[{type, title, url, duration}]}], milestones, daily[{day, minutes}]."
 		)
 		result = self.client.generate_content(prompt)
 		text = result.text if hasattr(result, "text") else str(result)
-		import json
-
-		return json.loads(text)
+		result_json = json.loads(text)
+		if cache and cache_key:
+			cache.set(cache_key, result_json, timeout=300)
+		return result_json
 
 	def explain_answer(self, payload: Dict[str, Any]) -> Dict[str, Any]:
 		if self.mock:

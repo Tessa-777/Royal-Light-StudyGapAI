@@ -92,7 +92,14 @@ class InMemoryRepository(Repository):
 	def save_quiz_responses(self, quiz_id: str, responses: List[Dict[str, Any]]) -> None:
 		if quiz_id not in self.quizzes:
 			raise KeyError(f"Quiz {quiz_id} not found")
-		self.quiz_responses[quiz_id] = list(responses)
+		# Ensure each response has an id per schema
+		normalized: List[Dict[str, Any]] = []
+		for r in responses:
+			resp = {**r}
+			if not resp.get("id"):
+				resp["id"] = _uuid()
+			normalized.append(resp)
+		self.quiz_responses[quiz_id] = normalized
 		correct = sum(1 for r in responses if r.get("is_correct"))
 		q = self.quizzes[quiz_id]
 		q["correct_answers"] = correct
@@ -111,17 +118,23 @@ class InMemoryRepository(Repository):
 	def save_ai_diagnostic(self, diagnostic: Dict[str, Any]) -> Dict[str, Any]:
 		did = _uuid()
 		payload = {**diagnostic, "id": did}
+		if not payload.get("generated_at"):
+			payload["generated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 		self.ai_diagnostics[did] = payload
 		return payload
 
 	def create_study_plan(self, plan: Dict[str, Any]) -> Dict[str, Any]:
 		pid = _uuid()
 		payload = {**plan, "id": pid}
+		now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+		payload.setdefault("created_at", now)
+		payload.setdefault("updated_at", now)
 		self.study_plans[pid] = payload
 		return payload
 
 	def update_study_plan(self, plan_id: str, plan_data: Dict[str, Any]) -> Dict[str, Any]:
 		self.study_plans[plan_id]["plan_data"] = plan_data
+		self.study_plans[plan_id]["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 		return self.study_plans[plan_id]
 
 	# Progress

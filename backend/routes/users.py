@@ -1,6 +1,8 @@
 from flask import Blueprint, current_app, jsonify, request
 
 from ..utils.validation import require_fields
+from ..utils.validate import validate_json
+from ..utils.schemas import RegisterRequest, LoginRequest, UpdateTargetScoreRequest
 
 
 users_bp = Blueprint("users", __name__)
@@ -12,6 +14,7 @@ def _repo():
 
 
 @users_bp.post("/register")
+@validate_json(RegisterRequest)
 def register():
 	data = request.get_json(force=True) or {}
 	ok, missing = require_fields(data, ["email", "name"])
@@ -22,6 +25,7 @@ def register():
 
 
 @users_bp.post("/login")
+@validate_json(LoginRequest)
 def login():
 	data = request.get_json(force=True) or {}
 	ok, missing = require_fields(data, ["email"])
@@ -41,6 +45,7 @@ def get_user(user_id: str):
 
 
 @users_bp.put("/<user_id>/target-score")
+@validate_json(UpdateTargetScoreRequest)
 def update_target(user_id: str):
 	data = request.get_json(force=True) or {}
 	ok, missing = require_fields(data, ["targetScore"])
