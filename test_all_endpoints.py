@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-BASE_URL = os.getenv("BACKEND_URL", "http://localhost:5000")
+BASE_URL = os.getenv("BACKEND_URL", "https://studygapai-backend.onrender.com")
 JWT_TOKEN = None
 
 # Rate limiting configuration for AI API calls
