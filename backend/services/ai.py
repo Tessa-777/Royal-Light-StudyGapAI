@@ -172,7 +172,8 @@ class AIService:
 		
 		cache_key = None
 		if cache:
-			cache_key = f"ai:plan:{hashlib.sha256(json.dumps({"w": weak_topics, "t": target_score, "c": current_score, "n": weeks_available}, sort_keys=True).encode()).hexdigest()}"
+			cache_data = {"w": weak_topics, "t": target_score, "c": current_score, "n": weeks_available}
+			cache_key = f"ai:plan:{hashlib.sha256(json.dumps(cache_data, sort_keys=True).encode()).hexdigest()}"
 			cached = cache.get(cache_key)
 			if cached:
 				return cached
