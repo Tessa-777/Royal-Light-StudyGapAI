@@ -3,13 +3,7 @@ import hashlib
 import json
 from typing import Any, Dict, List
 from flask import current_app
-
-try:
-	from google import genai  # type: ignore
-	from google.genai import errors as genai_errors  # type: ignore
-except Exception:  # pragma: no cover
-	genai = None
-	genai_errors = None
+import requests
 
 
 class AIAPIError(Exception):
@@ -22,15 +16,65 @@ class AIAPIError(Exception):
 
 class AIService:
 	def __init__(self, api_key: str | None, model_name: str, mock: bool) -> None:
-		self.mock = mock or not api_key or genai is None
+		self.mock = mock or not api_key
 		self.model_name = model_name
-		self.client = None
-		if not self.mock and api_key and genai is not None:
-			# New API: genai.Client() automatically picks up GEMINI_API_KEY from env
-			# But we can also pass api_key directly if provided
-			if api_key:
-				os.environ["GEMINI_API_KEY"] = api_key
-			self.client = genai.Client(api_key=api_key)
+		self.api_key = api_key
+		self.base_url = "https://generativelanguage.googleapis.com/v1beta"
+
+	def _call_gemini_api(self, prompt: str) -> str:
+		"""Call Gemini API via REST (avoids dependency conflicts)"""
+		url = f"{self.base_url}/models/{self.model_name}:generateContent"
+		headers = {
+			"Content-Type": "application/json",
+		}
+		params = {"key": self.api_key}
+		payload = {
+			"contents": [{
+				"parts": [{"text": prompt}]
+			}]
+		}
+		
+		try:
+			response = requests.post(url, json=payload, headers=headers, params=params, timeout=60)
+			response.raise_for_status()
+			data = response.json()
+			
+			# Extract text from response
+			if "candidates" in data and len(data["candidates"]) > 0:
+				candidate = data["candidates"][0]
+				if "content" in candidate and "parts" in candidate["content"]:
+					if len(candidate["content"]["parts"]) > 0:
+						return candidate["content"]["parts"][0].get("text", "")
+			
+			raise ValueError(f"Unexpected response format: {data}")
+			
+		except requests.exceptions.HTTPError as e:
+			error_code = None
+			if e.response:
+				error_code = e.response.status_code
+				try:
+					error_data = e.response.json()
+					error_message = str(error_data)
+				except:
+					error_message = str(e)
+			else:
+				error_message = str(e)
+			
+			# Check for rate limit errors
+			if error_code == 429 or '429' in error_message or 'RESOURCE_EXHAUSTED' in error_message.upper():
+				raise AIAPIError("AI service rate limit exceeded. Please try again later.", 429)
+			elif error_code == 503 or '503' in error_message or 'UNAVAILABLE' in error_message.upper():
+				raise AIAPIError("AI service temporarily unavailable. Please try again later.", 503)
+			else:
+				raise AIAPIError(f"AI service error: {error_message}", error_code or 503)
+		except Exception as e:
+			error_message = str(e)
+			if '429' in error_message or 'RESOURCE_EXHAUSTED' in error_message.upper():
+				raise AIAPIError("AI service rate limit exceeded. Please try again later.", 429)
+			elif '503' in error_message or 'UNAVAILABLE' in error_message.upper():
+				raise AIAPIError("AI service temporarily unavailable. Please try again later.", 503)
+			else:
+				raise AIAPIError(f"AI service error: {error_message}", 503)
 
 	def _mock_analysis(self, responses: List[Dict[str, Any]]) -> Dict[str, Any]:
 		incorrect = [r for r in responses if not r.get("isCorrect")]
@@ -77,50 +121,11 @@ class AIService:
 			'"analysisSummary": "...", "projectedScore": 165, '
 			'"foundationalGaps": [{"gapDescription": "...", "affectedTopics": ["..."]}]}'
 		)
-		# New API: client.models.generate_content()
-		try:
-			response = self.client.models.generate_content(
-				model=self.model_name,
-				contents=prompt
-			)
-		except Exception as e:
-			# Handle Google API errors
-			error_code = None
-			error_message = str(e)
-			
-			# Check if it's a ClientError with status code
-			if genai_errors and isinstance(e, genai_errors.ClientError):
-				# Extract error code from the error attributes
-				if hasattr(e, 'status_code'):
-					error_code = e.status_code
-				elif hasattr(e, 'code'):
-					error_code = e.code
-			
-			# Check error message for status codes (works for any exception type)
-			if error_code is None:
-				if '429' in error_message or 'RESOURCE_EXHAUSTED' in error_message.upper():
-					error_code = 429
-				elif '503' in error_message or 'UNAVAILABLE' in error_message.upper():
-					error_code = 503
-			
-			if error_code == 429:
-				raise AIAPIError("AI service rate limit exceeded. Please try again later.", 429)
-			elif error_code == 503:
-				raise AIAPIError("AI service temporarily unavailable. Please try again later.", 503)
-			else:
-				raise AIAPIError(f"AI service error: {error_message}", 503)
-		# Extract text from response - new API has .text attribute
-		text = response.text if hasattr(response, "text") and response.text else None
-		
-		# Fallback: try to extract from candidates if .text is empty
-		if not text and hasattr(response, 'candidates') and response.candidates:
-			candidate = response.candidates[0]
-			if hasattr(candidate, 'content') and candidate.content:
-				if hasattr(candidate.content, 'parts') and candidate.content.parts:
-					text = candidate.content.parts[0].text
+		# Use REST API instead of SDK to avoid dependency conflicts
+		text = self._call_gemini_api(prompt)
 		
 		if not text:
-			raise ValueError(f"Empty response from Gemini API. Response: {response}")
+			raise ValueError("Empty response from Gemini API")
 		
 		# Clean text - remove markdown code blocks if present
 		text = text.strip()
@@ -179,50 +184,11 @@ class AIService:
 			"CRITICAL: Return ONLY valid JSON, no explanations, no markdown, no code blocks. Start directly with {.\n"
 			"Return JSON structured as N weeks of daily study goals with fields weekNumber, focus, topics[{topicId, topicName, dailyGoals, estimatedTime, resources[{type, title, url, duration}]}], milestones, daily[{day, minutes}]."
 		)
-		# New API: client.models.generate_content()
-		try:
-			response = self.client.models.generate_content(
-				model=self.model_name,
-				contents=prompt
-			)
-		except Exception as e:
-			# Handle Google API errors
-			error_code = None
-			error_message = str(e)
-			
-			# Check if it's a ClientError with status code
-			if genai_errors and isinstance(e, genai_errors.ClientError):
-				# Extract error code from the error attributes
-				if hasattr(e, 'status_code'):
-					error_code = e.status_code
-				elif hasattr(e, 'code'):
-					error_code = e.code
-			
-			# Check error message for status codes (works for any exception type)
-			if error_code is None:
-				if '429' in error_message or 'RESOURCE_EXHAUSTED' in error_message.upper():
-					error_code = 429
-				elif '503' in error_message or 'UNAVAILABLE' in error_message.upper():
-					error_code = 503
-			
-			if error_code == 429:
-				raise AIAPIError("AI service rate limit exceeded. Please try again later.", 429)
-			elif error_code == 503:
-				raise AIAPIError("AI service temporarily unavailable. Please try again later.", 503)
-			else:
-				raise AIAPIError(f"AI service error: {error_message}", 503)
-		# Extract text from response - new API has .text attribute
-		text = response.text if hasattr(response, "text") and response.text else None
-		
-		# Fallback: try to extract from candidates if .text is empty
-		if not text and hasattr(response, 'candidates') and response.candidates:
-			candidate = response.candidates[0]
-			if hasattr(candidate, 'content') and candidate.content:
-				if hasattr(candidate.content, 'parts') and candidate.content.parts:
-					text = candidate.content.parts[0].text
+		# Use REST API instead of SDK to avoid dependency conflicts
+		text = self._call_gemini_api(prompt)
 		
 		if not text:
-			raise ValueError(f"Empty response from Gemini API. Response: {response}")
+			raise ValueError("Empty response from Gemini API")
 		
 		# Clean text - remove markdown code blocks if present
 		text = text.strip()
@@ -258,50 +224,11 @@ class AIService:
 			"CRITICAL: Return ONLY valid JSON, no explanations, no markdown, no code blocks. Start directly with {.\n"
 			"Return JSON with keys: explanation, correctReasoning, commonMistake, relatedTopics."
 		)
-		# New API: client.models.generate_content()
-		try:
-			response = self.client.models.generate_content(
-				model=self.model_name,
-				contents=prompt
-			)
-		except Exception as e:
-			# Handle Google API errors
-			error_code = None
-			error_message = str(e)
-			
-			# Check if it's a ClientError with status code
-			if genai_errors and isinstance(e, genai_errors.ClientError):
-				# Extract error code from the error attributes
-				if hasattr(e, 'status_code'):
-					error_code = e.status_code
-				elif hasattr(e, 'code'):
-					error_code = e.code
-			
-			# Check error message for status codes (works for any exception type)
-			if error_code is None:
-				if '429' in error_message or 'RESOURCE_EXHAUSTED' in error_message.upper():
-					error_code = 429
-				elif '503' in error_message or 'UNAVAILABLE' in error_message.upper():
-					error_code = 503
-			
-			if error_code == 429:
-				raise AIAPIError("AI service rate limit exceeded. Please try again later.", 429)
-			elif error_code == 503:
-				raise AIAPIError("AI service temporarily unavailable. Please try again later.", 503)
-			else:
-				raise AIAPIError(f"AI service error: {error_message}", 503)
-		# Extract text from response - new API has .text attribute
-		text = response.text if hasattr(response, "text") and response.text else None
-		
-		# Fallback: try to extract from candidates if .text is empty
-		if not text and hasattr(response, 'candidates') and response.candidates:
-			candidate = response.candidates[0]
-			if hasattr(candidate, 'content') and candidate.content:
-				if hasattr(candidate.content, 'parts') and candidate.content.parts:
-					text = candidate.content.parts[0].text
+		# Use REST API instead of SDK to avoid dependency conflicts
+		text = self._call_gemini_api(prompt)
 		
 		if not text:
-			raise ValueError(f"Empty response from Gemini API. Response: {response}")
+			raise ValueError("Empty response from Gemini API")
 		
 		# Clean text - remove markdown code blocks if present
 		text = text.strip()
