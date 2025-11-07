@@ -1,101 +1,50 @@
-2025-11-07T07:31:52.633911053Z ==> Cloning from https://github.com/Tessa-777/Royal-Light-StudyGapAI
-2025-11-07T07:31:53.193150468Z ==> Checking out commit 451c2ef722d1a03869b7ec3645309590433880db in branch backend-main
-2025-11-07T07:31:56.571213855Z ==> Installing Python version 3.11.9...
-2025-11-07T07:32:05.318664724Z ==> Using Python version 3.11.9 via environment variable PYTHON_VERSION
-2025-11-07T07:32:05.342854996Z ==> Docs on specifying a Python version: https://render.com/docs/python-version
-2025-11-07T07:32:11.751827054Z ==> Using Poetry version 2.1.3 (default)
-2025-11-07T07:32:11.806434304Z ==> Docs on specifying a Poetry version: https://render.com/docs/poetry-version
-2025-11-07T07:32:11.888735384Z ==> Running build command 'pip install --upgrade pip setuptools wheel && pip install --no-cache-dir -r requirements.txt'...
-2025-11-07T07:32:12.45214954Z Requirement already satisfied: pip in ./.venv/lib/python3.11/site-packages (24.0)
-2025-11-07T07:32:12.660308156Z Collecting pip
-2025-11-07T07:32:12.694660811Z   Downloading pip-25.3-py3-none-any.whl.metadata (4.7 kB)
-2025-11-07T07:32:12.791334207Z Requirement already satisfied: setuptools in ./.venv/lib/python3.11/site-packages (65.5.0)
-2025-11-07T07:32:13.081040585Z Collecting setuptools
-2025-11-07T07:32:13.084989152Z   Downloading setuptools-80.9.0-py3-none-any.whl.metadata (6.6 kB)
-2025-11-07T07:32:13.279418317Z Collecting wheel
-2025-11-07T07:32:13.283073497Z   Downloading wheel-0.45.1-py3-none-any.whl.metadata (2.3 kB)
-2025-11-07T07:32:13.498340879Z Downloading pip-25.3-py3-none-any.whl (1.8 MB)
-2025-11-07T07:32:13.734754847Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 7.6 MB/s eta 0:00:00
-2025-11-07T07:32:13.738664753Z Downloading setuptools-80.9.0-py3-none-any.whl (1.2 MB)
-2025-11-07T07:32:13.975834347Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 5.1 MB/s eta 0:00:00
-2025-11-07T07:32:13.979712682Z Downloading wheel-0.45.1-py3-none-any.whl (72 kB)
-2025-11-07T07:32:14.210756831Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 72.5/72.5 kB 271.9 kB/s eta 0:00:00
-2025-11-07T07:32:14.304906411Z Installing collected packages: wheel, setuptools, pip
-2025-11-07T07:32:14.44403226Z   Attempting uninstall: setuptools
-2025-11-07T07:32:14.446994305Z     Found existing installation: setuptools 65.5.0
-2025-11-07T07:32:14.468746183Z     Uninstalling setuptools-65.5.0:
-2025-11-07T07:32:14.480990742Z       Successfully uninstalled setuptools-65.5.0
-2025-11-07T07:32:15.387324067Z   Attempting uninstall: pip
-2025-11-07T07:32:15.389552496Z     Found existing installation: pip 24.0
-2025-11-07T07:32:15.435432854Z     Uninstalling pip-24.0:
-2025-11-07T07:32:15.442716344Z       Successfully uninstalled pip-24.0
-2025-11-07T07:32:16.620008786Z Successfully installed pip-25.3 setuptools-80.9.0 wheel-0.45.1
-2025-11-07T07:32:17.609413736Z Collecting Flask==3.0.3 (from -r requirements.txt (line 1))
-2025-11-07T07:32:17.676631304Z   Downloading flask-3.0.3-py3-none-any.whl.metadata (3.2 kB)
-2025-11-07T07:32:17.696286156Z Collecting gunicorn==21.2.0 (from -r requirements.txt (line 2))
-2025-11-07T07:32:17.701282946Z   Downloading gunicorn-21.2.0-py3-none-any.whl.metadata (4.1 kB)
-2025-11-07T07:32:17.728960275Z Collecting supabase==2.8.0 (from -r requirements.txt (line 3))
-2025-11-07T07:32:17.748260149Z   Downloading supabase-2.8.0-py3-none-any.whl.metadata (10 kB)
-2025-11-07T07:32:17.769486935Z Collecting google-genai==1.49.0 (from -r requirements.txt (line 4))
-2025-11-07T07:32:17.773589936Z   Downloading google_genai-1.49.0-py3-none-any.whl.metadata (46 kB)
-2025-11-07T07:32:17.93071716Z Collecting pydantic==2.9.2 (from -r requirements.txt (line 5))
-2025-11-07T07:32:17.934043493Z   Downloading pydantic-2.9.2-py3-none-any.whl.metadata (149 kB)
-2025-11-07T07:32:17.971318023Z Collecting requests==2.32.3 (from -r requirements.txt (line 6))
-2025-11-07T07:32:17.974663846Z   Downloading requests-2.32.3-py3-none-any.whl.metadata (4.6 kB)
-2025-11-07T07:32:17.984815569Z Collecting Flask-Caching==2.3.0 (from -r requirements.txt (line 7))
-2025-11-07T07:32:17.98939187Z   Downloading Flask_Caching-2.3.0-py3-none-any.whl.metadata (2.2 kB)
-2025-11-07T07:32:18.001700851Z Collecting Flask-Cors==5.0.0 (from -r requirements.txt (line 8))
-2025-11-07T07:32:18.004687206Z   Downloading Flask_Cors-5.0.0-py2.py3-none-any.whl.metadata (5.5 kB)
-2025-11-07T07:32:18.016723131Z Collecting python-dotenv==1.0.1 (from -r requirements.txt (line 9))
-2025-11-07T07:32:18.019792978Z   Downloading python_dotenv-1.0.1-py3-none-any.whl.metadata (23 kB)
-2025-11-07T07:32:18.033417848Z Collecting PyJWT==2.9.0 (from -r requirements.txt (line 10))
-2025-11-07T07:32:18.036452244Z   Downloading PyJWT-2.9.0-py3-none-any.whl.metadata (3.0 kB)
-2025-11-07T07:32:18.197887083Z Collecting cryptography==43.0.3 (from -r requirements.txt (line 11))
-2025-11-07T07:32:18.201234487Z   Downloading cryptography-43.0.3-cp39-abi3-manylinux_2_28_x86_64.whl.metadata (5.4 kB)
-2025-11-07T07:32:18.220637584Z Collecting Werkzeug>=3.0.0 (from Flask==3.0.3->-r requirements.txt (line 1))
-2025-11-07T07:32:18.223594798Z   Downloading werkzeug-3.1.3-py3-none-any.whl.metadata (3.7 kB)
-2025-11-07T07:32:18.236994363Z Collecting Jinja2>=3.1.2 (from Flask==3.0.3->-r requirements.txt (line 1))
-2025-11-07T07:32:18.240123092Z   Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
-2025-11-07T07:32:18.247662547Z Collecting itsdangerous>=2.1.2 (from Flask==3.0.3->-r requirements.txt (line 1))
-2025-11-07T07:32:18.25052166Z   Downloading itsdangerous-2.2.0-py3-none-any.whl.metadata (1.9 kB)
-2025-11-07T07:32:18.263984266Z Collecting click>=8.1.3 (from Flask==3.0.3->-r requirements.txt (line 1))
-2025-11-07T07:32:18.26689213Z   Downloading click-8.3.0-py3-none-any.whl.metadata (2.6 kB)
-2025-11-07T07:32:18.273987136Z Collecting blinker>=1.6.2 (from Flask==3.0.3->-r requirements.txt (line 1))
-2025-11-07T07:32:18.27689371Z   Downloading blinker-1.9.0-py3-none-any.whl.metadata (1.6 kB)
-2025-11-07T07:32:18.289539198Z Collecting packaging (from gunicorn==21.2.0->-r requirements.txt (line 2))
-2025-11-07T07:32:18.292384031Z   Downloading packaging-25.0-py3-none-any.whl.metadata (3.3 kB)
-2025-11-07T07:32:18.307796369Z Collecting gotrue<3.0,>=1.3 (from supabase==2.8.0->-r requirements.txt (line 3))
-2025-11-07T07:32:18.310610411Z   Downloading gotrue-2.12.4-py3-none-any.whl.metadata (2.0 kB)
-2025-11-07T07:32:18.325678653Z Collecting httpx<0.28,>=0.24 (from supabase==2.8.0->-r requirements.txt (line 3))
-2025-11-07T07:32:18.328646948Z   Downloading httpx-0.27.2-py3-none-any.whl.metadata (7.1 kB)
-2025-11-07T07:32:18.343587627Z Collecting postgrest<0.18.0,>=0.14 (from supabase==2.8.0->-r requirements.txt (line 3))
-2025-11-07T07:32:18.347505922Z   Downloading postgrest-0.17.2-py3-none-any.whl.metadata (3.4 kB)
-2025-11-07T07:32:18.360825005Z Collecting realtime<3.0.0,>=2.0.0 (from supabase==2.8.0->-r requirements.txt (line 3))
-2025-11-07T07:32:18.363476773Z   Downloading realtime-2.23.3-py3-none-any.whl.metadata (7.0 kB)
-2025-11-07T07:32:18.376594262Z Collecting storage3<0.9.0,>=0.5.3 (from supabase==2.8.0->-r requirements.txt (line 3))
-2025-11-07T07:32:18.379899875Z   Downloading storage3-0.8.2-py3-none-any.whl.metadata (1.8 kB)
-2025-11-07T07:32:18.390244982Z Collecting supafunc<0.7.0,>=0.3.1 (from supabase==2.8.0->-r requirements.txt (line 3))
-2025-11-07T07:32:18.394550007Z   Downloading supafunc-0.6.2-py3-none-any.whl.metadata (1.1 kB)
-2025-11-07T07:32:18.406928599Z Collecting typing-extensions<5.0.0,>=4.12.2 (from supabase==2.8.0->-r requirements.txt (line 3))
-2025-11-07T07:32:18.409854173Z   Downloading typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
-2025-11-07T07:32:18.425985138Z Collecting anyio<5.0.0,>=4.8.0 (from google-genai==1.49.0->-r requirements.txt (line 4))
-2025-11-07T07:32:18.429704129Z   Downloading anyio-4.11.0-py3-none-any.whl.metadata (4.1 kB)
-2025-11-07T07:32:18.463672406Z Collecting google-auth<3.0.0,>=2.14.1 (from google-genai==1.49.0->-r requirements.txt (line 4))
-2025-11-07T07:32:18.466649492Z   Downloading google_auth-2.43.0-py2.py3-none-any.whl.metadata (6.6 kB)
-2025-11-07T07:32:18.478030532Z INFO: pip is looking at multiple versions of google-genai to determine which version is compatible with other requirements. This could take a while.
-2025-11-07T07:32:18.480953636Z ERROR: Cannot install -r requirements.txt (line 3) and -r requirements.txt (line 4) because these package versions have conflicting dependencies.
-2025-11-07T07:32:18.481324864Z 
-2025-11-07T07:32:18.481329744Z The conflict is caused by:
-2025-11-07T07:32:18.481333195Z     supabase 2.8.0 depends on httpx<0.28 and >=0.24
-2025-11-07T07:32:18.481335375Z     google-genai 1.49.0 depends on httpx<1.0.0 and >=0.28.1
-2025-11-07T07:32:18.481337375Z 
-2025-11-07T07:32:18.481340215Z Additionally, some packages in these conflicts have no matching distributions available for your environment:
-2025-11-07T07:32:18.481342485Z     httpx
-2025-11-07T07:32:18.481344495Z 
-2025-11-07T07:32:18.481346565Z To fix this you could try to:
-2025-11-07T07:32:18.481348835Z 1. loosen the range of package versions you've specified
-2025-11-07T07:32:18.481351335Z 2. remove package versions to allow pip to attempt to solve the dependency conflict
-2025-11-07T07:32:18.481353335Z 
-2025-11-07T07:32:18.589447761Z ERROR: ResolutionImpossible: for help visit https://pip.pypa.io/en/latest/topics/dependency-resolution/#dealing-with-dependency-conflicts
-2025-11-07T07:32:18.718070439Z ==> Build failed 😞
-2025-11-07T07:32:18.718094409Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
+2025-11-07T07:39:54.149637703Z   Downloading PyJWT-2.9.0-py3-none-any.whl.metadata (3.0 kB)
+2025-11-07T07:39:54.30067847Z Collecting cryptography==43.0.3 (from -r requirements.txt (line 11))
+2025-11-07T07:39:54.304721809Z   Downloading cryptography-43.0.3-cp39-abi3-manylinux_2_28_x86_64.whl.metadata (5.4 kB)
+2025-11-07T07:39:54.324243958Z Collecting Werkzeug>=3.0.0 (from Flask==3.0.3->-r requirements.txt (line 1))
+2025-11-07T07:39:54.328277267Z   Downloading werkzeug-3.1.3-py3-none-any.whl.metadata (3.7 kB)
+2025-11-07T07:39:54.338787787Z Collecting Jinja2>=3.1.2 (from Flask==3.0.3->-r requirements.txt (line 1))
+2025-11-07T07:39:54.342525739Z   Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+2025-11-07T07:39:54.350070165Z Collecting itsdangerous>=2.1.2 (from Flask==3.0.3->-r requirements.txt (line 1))
+2025-11-07T07:39:54.353593312Z   Downloading itsdangerous-2.2.0-py3-none-any.whl.metadata (1.9 kB)
+2025-11-07T07:39:54.366048856Z Collecting click>=8.1.3 (from Flask==3.0.3->-r requirements.txt (line 1))
+2025-11-07T07:39:54.369815819Z   Downloading click-8.3.0-py3-none-any.whl.metadata (2.6 kB)
+2025-11-07T07:39:54.376801122Z Collecting blinker>=1.6.2 (from Flask==3.0.3->-r requirements.txt (line 1))
+2025-11-07T07:39:54.38036226Z   Downloading blinker-1.9.0-py3-none-any.whl.metadata (1.6 kB)
+2025-11-07T07:39:54.392699331Z Collecting packaging (from gunicorn==21.2.0->-r requirements.txt (line 2))
+2025-11-07T07:39:54.397227331Z   Downloading packaging-25.0-py3-none-any.whl.metadata (3.3 kB)
+2025-11-07T07:39:54.412275861Z Collecting gotrue<3.0,>=1.3 (from supabase==2.8.0->-r requirements.txt (line 3))
+2025-11-07T07:39:54.416466563Z   Downloading gotrue-2.12.4-py3-none-any.whl.metadata (2.0 kB)
+2025-11-07T07:39:54.431190016Z Collecting httpx<0.28,>=0.24 (from supabase==2.8.0->-r requirements.txt (line 3))
+2025-11-07T07:39:54.434926098Z   Downloading httpx-0.27.2-py3-none-any.whl.metadata (7.1 kB)
+2025-11-07T07:39:54.449778265Z Collecting postgrest<0.18.0,>=0.14 (from supabase==2.8.0->-r requirements.txt (line 3))
+2025-11-07T07:39:54.45412312Z   Downloading postgrest-0.17.2-py3-none-any.whl.metadata (3.4 kB)
+2025-11-07T07:39:54.46689356Z Collecting realtime<3.0.0,>=2.0.0 (from supabase==2.8.0->-r requirements.txt (line 3))
+2025-11-07T07:39:54.470722064Z   Downloading realtime-2.23.3-py3-none-any.whl.metadata (7.0 kB)
+2025-11-07T07:39:54.483448874Z Collecting storage3<0.9.0,>=0.5.3 (from supabase==2.8.0->-r requirements.txt (line 3))
+2025-11-07T07:39:54.487556134Z   Downloading storage3-0.8.2-py3-none-any.whl.metadata (1.8 kB)
+2025-11-07T07:39:54.497562944Z Collecting supafunc<0.7.0,>=0.3.1 (from supabase==2.8.0->-r requirements.txt (line 3))
+2025-11-07T07:39:54.502101794Z   Downloading supafunc-0.6.2-py3-none-any.whl.metadata (1.1 kB)
+2025-11-07T07:39:54.514175039Z Collecting typing-extensions<5.0.0,>=4.12.2 (from supabase==2.8.0->-r requirements.txt (line 3))
+2025-11-07T07:39:54.517760798Z   Downloading typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+2025-11-07T07:39:54.531363286Z Collecting anyio<5.0.0,>=4.8.0 (from google-genai==1.49.0->-r requirements.txt (line 4))
+2025-11-07T07:39:54.534953055Z   Downloading anyio-4.11.0-py3-none-any.whl.metadata (4.1 kB)
+2025-11-07T07:39:54.565765962Z Collecting google-auth<3.0.0,>=2.14.1 (from google-genai==1.49.0->-r requirements.txt (line 4))
+2025-11-07T07:39:54.573600904Z   Downloading google_auth-2.43.0-py2.py3-none-any.whl.metadata (6.6 kB)
+2025-11-07T07:39:54.584083504Z INFO: pip is looking at multiple versions of google-genai to determine which version is compatible with other requirements. This could take a while.
+2025-11-07T07:39:54.586895436Z ERROR: Cannot install -r requirements.txt (line 3) and -r requirements.txt (line 4) because these package versions have conflicting dependencies.
+2025-11-07T07:39:54.587252314Z 
+2025-11-07T07:39:54.587256624Z The conflict is caused by:
+2025-11-07T07:39:54.587259584Z     supabase 2.8.0 depends on httpx<0.28 and >=0.24
+2025-11-07T07:39:54.587261714Z     google-genai 1.49.0 depends on httpx<1.0.0 and >=0.28.1
+2025-11-07T07:39:54.587263914Z 
+2025-11-07T07:39:54.587266604Z Additionally, some packages in these conflicts have no matching distributions available for your environment:
+2025-11-07T07:39:54.587268964Z     httpx
+2025-11-07T07:39:54.587271044Z 
+2025-11-07T07:39:54.587273244Z To fix this you could try to:
+2025-11-07T07:39:54.587275554Z 1. loosen the range of package versions you've specified
+2025-11-07T07:39:54.587278204Z 2. remove package versions to allow pip to attempt to solve the dependency conflict
+2025-11-07T07:39:54.587280234Z 
+2025-11-07T07:39:54.693338384Z ERROR: ResolutionImpossible: for help visit https://pip.pypa.io/en/latest/topics/dependency-resolution/#dealing-with-dependency-conflicts
+2025-11-07T07:39:54.860609867Z ==> Build failed 😞
+2025-11-07T07:39:54.860627787Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
