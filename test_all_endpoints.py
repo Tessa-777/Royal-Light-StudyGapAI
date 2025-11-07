@@ -8,6 +8,7 @@ Run get_jwt_token.py first to obtain a JWT token.
 import os
 import sys
 import json
+import time
 import requests
 from dotenv import load_dotenv
 
@@ -16,6 +17,10 @@ load_dotenv()
 # Configuration
 BASE_URL = os.getenv("BACKEND_URL", "http://localhost:5000")
 JWT_TOKEN = None
+
+# Rate limiting configuration for AI API calls
+# Set to 0 to disable delays (for paid/free trial tiers with higher limits)
+AI_API_DELAY_SECONDS = float(os.getenv("AI_API_DELAY_SECONDS", "0.0"))  # 0 = no delay
 
 # Try to get token from file or environment
 if os.path.exists(".test_token"):
@@ -49,7 +54,7 @@ def print_test(name: str):
     print("="*60)
 
 
-def print_result(success: bool, response, expected_status: int = None):
+def print_result(success: bool, response, expected_status: int = None, show_prompt_size: bool = False, prompt_data: dict = None):
     """Print test result"""
     status = response.status_code
     if expected_status:
@@ -58,6 +63,15 @@ def print_result(success: bool, response, expected_status: int = None):
     status_icon = "✅" if success else "❌"
     print(f"{status_icon} Status: {status} (expected: {expected_status or '200/201'})")
     
+    # Show prompt size if requested (for AI endpoints)
+    if show_prompt_size and prompt_data:
+        prompt_str = json.dumps(prompt_data, sort_keys=True)
+        prompt_size = len(prompt_str)
+        prompt_tokens_estimate = prompt_size // 4  # Rough estimate: ~4 chars per token
+        print(f"📊 Prompt size: {prompt_size:,} chars (~{prompt_tokens_estimate:,} tokens)")
+        if prompt_size > 10000:
+            print(f"⚠️  WARNING: Large prompt detected! This may hit token limits.")
+    
     try:
         data = response.json()
         print(f"Response: {json.dumps(data, indent=2)[:500]}")
@@ -65,6 +79,13 @@ def print_result(success: bool, response, expected_status: int = None):
         print(f"Response: {response.text[:500]}")
     
     return success
+
+
+def wait_for_ai_api():
+    """Wait between AI API calls to respect rate limits (disabled by default)"""
+    if AI_API_DELAY_SECONDS > 0:
+        print(f"⏳ Waiting {AI_API_DELAY_SECONDS}s before next AI API call (rate limit protection)...")
+        time.sleep(AI_API_DELAY_SECONDS)
 
 
 def test_health():
@@ -181,7 +202,7 @@ def test_analyze_diagnostic(quiz_id: str, question_ids: list):
         json=data,
         headers=AUTH_HEADERS
     )
-    success = print_result(True, response, 200)
+    success = print_result(True, response, 200, show_prompt_size=True, prompt_data=data)
     
     if success:
         data = response.json()
@@ -208,7 +229,7 @@ def test_generate_study_plan(diagnostic_id: str, user_id: str):
         json=data,
         headers=AUTH_HEADERS
     )
-    success = print_result(True, response, 201)
+    success = print_result(True, response, 201, show_prompt_size=True, prompt_data=data)
     
     if success:
         data = response.json()
@@ -231,7 +252,7 @@ def test_explain_answer():
         json=data,
         headers=PUBLIC_HEADERS
     )
-    return print_result(True, response, 200)
+    return print_result(True, response, 200, show_prompt_size=True, prompt_data=data)
 
 
 def test_get_progress(user_id: str):
@@ -248,8 +269,32 @@ def test_mark_progress_complete():
     """Test mark progress complete"""
     print_test("Mark Progress Complete (Authenticated)")
     
+    # Get a real topic_id from questions (questions have topic_id that references topics)
+    # First, fetch questions to get a valid topic_id
+    questions_response = requests.get(f"{BASE_URL}/api/questions?total=1", headers=PUBLIC_HEADERS)
+    if questions_response.status_code == 200:
+        questions = questions_response.json()
+        if questions and len(questions) > 0:
+            # Use the topic_id from the first question
+            topic_id = questions[0].get("topic_id")
+            if not topic_id:
+                # Fallback: generate UUID (might fail foreign key constraint, but tests UUID format)
+                import uuid
+                topic_id = str(uuid.uuid4())
+                print(f"[WARN] No topic_id in question, using generated UUID: {topic_id}")
+        else:
+            # No questions available, generate UUID
+            import uuid
+            topic_id = str(uuid.uuid4())
+            print(f"[WARN] No questions available, using generated UUID: {topic_id}")
+    else:
+        # Failed to get questions, generate UUID
+        import uuid
+        topic_id = str(uuid.uuid4())
+        print(f"[WARN] Failed to fetch questions, using generated UUID: {topic_id}")
+    
     data = {
-        "topicId": "topic-1",
+        "topicId": topic_id,
         "status": "completed",
         "resourcesViewed": 3,
         "practiceProblemsCompleted": 10
@@ -304,6 +349,17 @@ def main():
     print("="*60)
     print(f"\nBase URL: {BASE_URL}")
     print(f"Token: {JWT_TOKEN[:30]}...")
+    print(f"\n⚙️  Rate Limiting Configuration:")
+    if AI_API_DELAY_SECONDS > 0:
+        print(f"   AI API Delay: {AI_API_DELAY_SECONDS}s between calls")
+        print(f"   Max AI Requests/Minute: {60 / AI_API_DELAY_SECONDS:.1f} RPM")
+    else:
+        print(f"   AI API Delay: DISABLED (no delays between calls)")
+        print(f"   (Configure AI_API_DELAY_SECONDS env var to enable rate limiting)")
+    print(f"\n📊 AI API Calls in this test suite: 3")
+    print(f"   1. Explain Answer (public)")
+    print(f"   2. Analyze Diagnostic (authenticated)")
+    print(f"   3. Generate Study Plan (authenticated)")
     print("\nStarting tests...\n")
     
     results = []

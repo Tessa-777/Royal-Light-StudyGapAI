@@ -6,8 +6,18 @@ from flask import current_app
 
 try:
 	from google import genai  # type: ignore
+	from google.genai import errors as genai_errors  # type: ignore
 except Exception:  # pragma: no cover
 	genai = None
+	genai_errors = None
+
+
+class AIAPIError(Exception):
+	"""Custom exception for AI API errors with HTTP status code"""
+	def __init__(self, message, status_code=503):
+		self.message = message
+		self.status_code = status_code
+		super().__init__(message)
 
 
 class AIService:
@@ -68,10 +78,37 @@ class AIService:
 			'"foundationalGaps": [{"gapDescription": "...", "affectedTopics": ["..."]}]}'
 		)
 		# New API: client.models.generate_content()
-		response = self.client.models.generate_content(
-			model=self.model_name,
-			contents=prompt
-		)
+		try:
+			response = self.client.models.generate_content(
+				model=self.model_name,
+				contents=prompt
+			)
+		except Exception as e:
+			# Handle Google API errors
+			error_code = None
+			error_message = str(e)
+			
+			# Check if it's a ClientError with status code
+			if genai_errors and isinstance(e, genai_errors.ClientError):
+				# Extract error code from the error attributes
+				if hasattr(e, 'status_code'):
+					error_code = e.status_code
+				elif hasattr(e, 'code'):
+					error_code = e.code
+			
+			# Check error message for status codes (works for any exception type)
+			if error_code is None:
+				if '429' in error_message or 'RESOURCE_EXHAUSTED' in error_message.upper():
+					error_code = 429
+				elif '503' in error_message or 'UNAVAILABLE' in error_message.upper():
+					error_code = 503
+			
+			if error_code == 429:
+				raise AIAPIError("AI service rate limit exceeded. Please try again later.", 429)
+			elif error_code == 503:
+				raise AIAPIError("AI service temporarily unavailable. Please try again later.", 503)
+			else:
+				raise AIAPIError(f"AI service error: {error_message}", 503)
 		# Extract text from response - new API has .text attribute
 		text = response.text if hasattr(response, "text") and response.text else None
 		
@@ -143,10 +180,37 @@ class AIService:
 			"Return JSON structured as N weeks of daily study goals with fields weekNumber, focus, topics[{topicId, topicName, dailyGoals, estimatedTime, resources[{type, title, url, duration}]}], milestones, daily[{day, minutes}]."
 		)
 		# New API: client.models.generate_content()
-		response = self.client.models.generate_content(
-			model=self.model_name,
-			contents=prompt
-		)
+		try:
+			response = self.client.models.generate_content(
+				model=self.model_name,
+				contents=prompt
+			)
+		except Exception as e:
+			# Handle Google API errors
+			error_code = None
+			error_message = str(e)
+			
+			# Check if it's a ClientError with status code
+			if genai_errors and isinstance(e, genai_errors.ClientError):
+				# Extract error code from the error attributes
+				if hasattr(e, 'status_code'):
+					error_code = e.status_code
+				elif hasattr(e, 'code'):
+					error_code = e.code
+			
+			# Check error message for status codes (works for any exception type)
+			if error_code is None:
+				if '429' in error_message or 'RESOURCE_EXHAUSTED' in error_message.upper():
+					error_code = 429
+				elif '503' in error_message or 'UNAVAILABLE' in error_message.upper():
+					error_code = 503
+			
+			if error_code == 429:
+				raise AIAPIError("AI service rate limit exceeded. Please try again later.", 429)
+			elif error_code == 503:
+				raise AIAPIError("AI service temporarily unavailable. Please try again later.", 503)
+			else:
+				raise AIAPIError(f"AI service error: {error_message}", 503)
 		# Extract text from response - new API has .text attribute
 		text = response.text if hasattr(response, "text") and response.text else None
 		
@@ -195,10 +259,37 @@ class AIService:
 			"Return JSON with keys: explanation, correctReasoning, commonMistake, relatedTopics."
 		)
 		# New API: client.models.generate_content()
-		response = self.client.models.generate_content(
-			model=self.model_name,
-			contents=prompt
-		)
+		try:
+			response = self.client.models.generate_content(
+				model=self.model_name,
+				contents=prompt
+			)
+		except Exception as e:
+			# Handle Google API errors
+			error_code = None
+			error_message = str(e)
+			
+			# Check if it's a ClientError with status code
+			if genai_errors and isinstance(e, genai_errors.ClientError):
+				# Extract error code from the error attributes
+				if hasattr(e, 'status_code'):
+					error_code = e.status_code
+				elif hasattr(e, 'code'):
+					error_code = e.code
+			
+			# Check error message for status codes (works for any exception type)
+			if error_code is None:
+				if '429' in error_message or 'RESOURCE_EXHAUSTED' in error_message.upper():
+					error_code = 429
+				elif '503' in error_message or 'UNAVAILABLE' in error_message.upper():
+					error_code = 503
+			
+			if error_code == 429:
+				raise AIAPIError("AI service rate limit exceeded. Please try again later.", 429)
+			elif error_code == 503:
+				raise AIAPIError("AI service temporarily unavailable. Please try again later.", 503)
+			else:
+				raise AIAPIError(f"AI service error: {error_message}", 503)
 		# Extract text from response - new API has .text attribute
 		text = response.text if hasattr(response, "text") and response.text else None
 		

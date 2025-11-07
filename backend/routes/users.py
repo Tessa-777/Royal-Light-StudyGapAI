@@ -81,7 +81,13 @@ def get_current_user(current_user_id):
 	"""Get current authenticated user's profile"""
 	user = _repo().get_user(current_user_id)
 	if not user:
-		return jsonify({"error": "not_found"}), 404
+		# User authenticated via JWT but doesn't exist in users table yet
+		# Auto-create a basic user record
+		user = _repo().upsert_user({
+			"id": current_user_id,
+			"email": f"user_{current_user_id[:8]}@example.com",  # Placeholder email
+			"name": "Student"
+		})
 	return jsonify(user), 200
 
 

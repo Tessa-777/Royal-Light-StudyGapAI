@@ -33,15 +33,26 @@ def create_app() -> Flask:
 	# Store it on app instance so it persists across requests
 	use_in_memory = app.config.get("USE_IN_MEMORY_DB", True)
 	supabase_url = (app.config.get("SUPABASE_URL") or "").strip()
-	supabase_key = (app.config.get("SUPABASE_ANON_KEY") or "").strip()
+	
+	# Use service role key for database operations (bypasses RLS)
+	# Fall back to anon key if service role key not available
+	supabase_db_key = (
+		app.config.get("SUPABASE_SERVICE_ROLE_KEY") or 
+		app.config.get("SUPABASE_ANON_KEY") or 
+		""
+	).strip()
+	
+	# Anon key is still needed for JWT validation (SupabaseAuth)
+	supabase_anon_key = (app.config.get("SUPABASE_ANON_KEY") or "").strip()
 	
 	# Debug logging (only in development)
 	if app.config.get("DEBUG"):
 		print(f"[DEBUG] USE_IN_MEMORY_DB: {use_in_memory}")
 		print(f"[DEBUG] SUPABASE_URL: {supabase_url[:50] if supabase_url else 'NOT SET'}...")
-		print(f"[DEBUG] SUPABASE_ANON_KEY: {'SET' if supabase_key else 'NOT SET'}")
+		print(f"[DEBUG] SUPABASE_DB_KEY: {'SERVICE_ROLE' if app.config.get('SUPABASE_SERVICE_ROLE_KEY') else 'ANON' if supabase_db_key else 'NOT SET'}")
+		print(f"[DEBUG] SUPABASE_ANON_KEY: {'SET' if supabase_anon_key else 'NOT SET'} (for JWT validation)")
 	
-	if use_in_memory or not (supabase_url and supabase_key):
+	if use_in_memory or not (supabase_url and supabase_db_key):
 		from .repositories.memory_repository import InMemoryRepository
 		app.extensions["repository"] = InMemoryRepository()
 		if not use_in_memory:
@@ -50,9 +61,11 @@ def create_app() -> Flask:
 	else:
 		from .repositories.supabase_repository import SupabaseRepository
 		try:
-			app.extensions["repository"] = SupabaseRepository(supabase_url, supabase_key)
+			# Use service role key (or anon key as fallback) for database operations
+			app.extensions["repository"] = SupabaseRepository(supabase_url, supabase_db_key)
 			if app.config.get("DEBUG"):
-				print(f"[DEBUG] Supabase repository initialized successfully")
+				key_type = "SERVICE_ROLE" if app.config.get("SUPABASE_SERVICE_ROLE_KEY") else "ANON"
+				print(f"[DEBUG] Supabase repository initialized successfully with {key_type} key")
 		except Exception as e:
 			import warnings
 			warnings.warn(f"Failed to initialize Supabase repository: {e}. Falling back to in-memory repository.")
@@ -61,12 +74,12 @@ def create_app() -> Flask:
 			from .repositories.memory_repository import InMemoryRepository
 			app.extensions["repository"] = InMemoryRepository()
 
-	# Initialize Supabase Auth helper for JWT validation
+	# Initialize Supabase Auth helper for JWT validation (uses anon key, not service role)
 	from .utils.auth import SupabaseAuth
-	if supabase_url and supabase_key:
-		app.extensions["supabase_auth"] = SupabaseAuth(supabase_url, supabase_key)
+	if supabase_url and supabase_anon_key:
+		app.extensions["supabase_auth"] = SupabaseAuth(supabase_url, supabase_anon_key)
 		if app.config.get("DEBUG"):
-			print(f"[DEBUG] Supabase Auth initialized")
+			print(f"[DEBUG] Supabase Auth initialized (for JWT validation)")
 
 	# Health endpoint
 	@app.get("/health")

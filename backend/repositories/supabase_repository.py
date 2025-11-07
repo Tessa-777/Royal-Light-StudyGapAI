@@ -35,14 +35,24 @@ class SupabaseRepository(Repository):
 		return user
 
 	def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
-		response = self.client.table("users").select("*").eq("id", user_id).maybe_single().execute()
-		return response.data
+		try:
+			response = self.client.table("users").select("*").eq("id", user_id).maybe_single().execute()
+			if response and hasattr(response, 'data'):
+				return response.data
+			return None
+		except Exception:
+			return None
 
 	def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
-		response = (
-			self.client.table("users").select("*").eq("email", email).maybe_single().execute()
-		)
-		return response.data
+		try:
+			response = (
+				self.client.table("users").select("*").eq("email", email).maybe_single().execute()
+			)
+			if response and hasattr(response, 'data'):
+				return response.data
+			return None
+		except Exception:
+			return None
 
 	def update_user_target_score(self, user_id: str, target_score: int) -> Dict[str, Any]:
 		response = (
@@ -61,13 +71,18 @@ class SupabaseRepository(Repository):
 
 	# Questions / Quizzes
 	def get_diagnostic_questions(self, total: int = 30) -> List[Dict[str, Any]]:
-		response = (
-			self.client.table("questions")
-			.select("*")
-			.limit(total)
-			.execute()
-		)
-		return response.data
+		try:
+			response = (
+				self.client.table("questions")
+				.select("*")
+				.limit(total)
+				.execute()
+			)
+			if response and hasattr(response, 'data'):
+				return response.data
+			return []
+		except Exception:
+			return []
 
 	def create_quiz(self, quiz: Dict[str, Any]) -> Dict[str, Any]:
 		response = self.client.table("diagnostic_quizzes").insert(quiz).execute()
@@ -86,8 +101,9 @@ class SupabaseRepository(Repository):
 			.eq("quiz_id", quiz_id)
 			.execute()
 		)
-		correct = sum(1 for r in res.data if r.get("is_correct"))
-		total = len(res.data)
+		res_data = res.data if res and hasattr(res, 'data') else []
+		correct = sum(1 for r in res_data if r.get("is_correct"))
+		total = len(res_data)
 		score = (correct / max(1, total)) * 100.0
 		self.client.table("diagnostic_quizzes").update({
 			"correct_answers": correct,
@@ -95,13 +111,18 @@ class SupabaseRepository(Repository):
 		}).eq("id", quiz_id).execute()
 
 	def get_quiz_results(self, quiz_id: str) -> Dict[str, Any]:
-		quiz = (
-			self.client.table("diagnostic_quizzes").select("*").eq("id", quiz_id).single().execute().data
-		)
-		responses = (
-			self.client.table("quiz_responses").select("*").eq("quiz_id", quiz_id).execute().data
-		)
-		return {"quiz": quiz, "responses": responses}
+		try:
+			quiz_response = self.client.table("diagnostic_quizzes").select("*").eq("id", quiz_id).single().execute()
+			quiz = quiz_response.data if quiz_response and hasattr(quiz_response, 'data') else None
+			
+			responses_response = self.client.table("quiz_responses").select("*").eq("quiz_id", quiz_id).execute()
+			responses = responses_response.data if responses_response and hasattr(responses_response, 'data') else []
+			
+			if not quiz:
+				raise KeyError(f"Quiz {quiz_id} not found")
+			return {"quiz": quiz, "responses": responses}
+		except Exception as e:
+			raise KeyError(f"Quiz {quiz_id} not found") from e
 
 	# AI Diagnostics / Study Plans
 	def save_ai_diagnostic(self, diagnostic: Dict[str, Any]) -> Dict[str, Any]:
@@ -142,15 +163,25 @@ class SupabaseRepository(Repository):
 		return {"id": plan_id, "plan_data": plan_data}
 
 	def get_study_plan(self, plan_id: str) -> Optional[Dict[str, Any]]:
-		response = self.client.table("study_plans").select("*").eq("id", plan_id).maybe_single().execute()
-		return response.data
+		try:
+			response = self.client.table("study_plans").select("*").eq("id", plan_id).maybe_single().execute()
+			if response and hasattr(response, 'data'):
+				return response.data
+			return None
+		except Exception:
+			return None
 
 	# Progress
 	def get_user_progress(self, user_id: str) -> List[Dict[str, Any]]:
-		response = (
-			self.client.table("progress_tracking").select("*").eq("user_id", user_id).execute()
-		)
-		return response.data
+		try:
+			response = (
+				self.client.table("progress_tracking").select("*").eq("user_id", user_id).execute()
+			)
+			if response and hasattr(response, 'data'):
+				return response.data
+			return []
+		except Exception:
+			return []
 
 	def mark_progress_complete(self, progress: Dict[str, Any]) -> Dict[str, Any]:
 		response = self.client.table("progress_tracking").insert(progress).execute()

@@ -10,6 +10,7 @@ class AppConfig:
 	# Supabase
 	SUPABASE_URL = os.getenv("SUPABASE_URL")
 	SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+	SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")  # For backend operations (bypasses RLS)
 	USE_IN_MEMORY_DB = os.getenv("USE_IN_MEMORY_DB", "true").lower() == "true"
 
 	# AI

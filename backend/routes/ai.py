@@ -1,6 +1,6 @@
 from flask import Blueprint, current_app, jsonify, request
 
-from ..services.ai import AIService
+from ..services.ai import AIService, AIAPIError
 from ..services.study_plan import build_adjusted_plan
 from ..utils.validation import require_fields
 from ..utils.validate import validate_json
@@ -36,7 +36,13 @@ def analyze_diagnostic(current_user_id):
 	if not quiz_results or quiz_results.get("quiz", {}).get("user_id") != current_user_id:
 		return jsonify({"error": "forbidden", "message": "Quiz not found or access denied"}), 403
 	
-	analysis = _ai().analyze_diagnostic(data["responses"])
+	try:
+		analysis = _ai().analyze_diagnostic(data["responses"])
+	except AIAPIError as e:
+		return jsonify({"error": "ai_service_error", "message": e.message}), e.status_code
+	except Exception as e:
+		return jsonify({"error": "internal_error", "message": "An unexpected error occurred while analyzing diagnostic"}), 500
+	
 	diagnostic = _repo().save_ai_diagnostic({
 		"quiz_id": data["quizId"],
 		"weak_topics": analysis.get("weakTopics"),
@@ -64,7 +70,13 @@ def generate_study_plan(current_user_id):
 	diagnostic = _repo().get_study_plan(data["diagnosticId"])  # This might not work, need to check
 	# For now, use authenticated user_id
 	weeks_available = int(data.get("weeksAvailable", 6))
-	plan = _ai().generate_study_plan(data["weakTopics"], int(data["targetScore"]), int(data.get("currentScore", 150)), weeks_available)
+	try:
+		plan = _ai().generate_study_plan(data["weakTopics"], int(data["targetScore"]), int(data.get("currentScore", 150)), weeks_available)
+	except AIAPIError as e:
+		return jsonify({"error": "ai_service_error", "message": e.message}), e.status_code
+	except Exception as e:
+		return jsonify({"error": "internal_error", "message": "An unexpected error occurred while generating study plan"}), 500
+	
 	stored = _repo().create_study_plan({
 		"user_id": current_user_id,  # Use authenticated user_id
 		"diagnostic_id": data["diagnosticId"],
@@ -80,12 +92,17 @@ def explain_answer():
 	ok, missing = require_fields(data, ["questionId", "studentAnswer", "correctAnswer", "studentReasoning"])
 	if not ok:
 		return jsonify({"error": "missing_fields", "fields": missing}), 400
-	explanation = _ai().explain_answer({
-		"questionId": data["questionId"],
-		"studentAnswer": data["studentAnswer"],
-		"correctAnswer": data["correctAnswer"],
-		"studentReasoning": data["studentReasoning"],
-	})
+	try:
+		explanation = _ai().explain_answer({
+			"questionId": data["questionId"],
+			"studentAnswer": data["studentAnswer"],
+			"correctAnswer": data["correctAnswer"],
+			"studentReasoning": data["studentReasoning"],
+		})
+	except AIAPIError as e:
+		return jsonify({"error": "ai_service_error", "message": e.message}), e.status_code
+	except Exception as e:
+		return jsonify({"error": "internal_error", "message": "An unexpected error occurred while explaining answer"}), 500
 	return jsonify(explanation), 200
 
 
