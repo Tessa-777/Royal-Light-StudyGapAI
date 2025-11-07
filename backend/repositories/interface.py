@@ -57,4 +57,14 @@ class Repository:
 	def get_analytics_dashboard(self) -> Dict[str, Any]:
 		raise NotImplementedError
 
+	# Topics
+	def get_topics(self, subject: Optional[str] = None) -> List[Dict[str, Any]]:
+		"""Get all topics, optionally filtered by subject."""
+		raise NotImplementedError
+
+	# Resources
+	def get_resources(self, topic_id: Optional[str] = None, topic_name: Optional[str] = None) -> List[Dict[str, Any]]:
+		"""Get resources, optionally filtered by topic_id or topic_name."""
+		raise NotImplementedError
+
 

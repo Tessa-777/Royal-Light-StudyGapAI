@@ -8,6 +8,7 @@ from .routes.quiz import quiz_bp
 from .routes.ai import ai_bp
 from .routes.progress import progress_bp
 from .routes.analytics import analytics_bp
+from .routes.resources import resources_bp
 from flask_cors import CORS
 
 # Load environment variables from .env file
@@ -92,6 +93,7 @@ def create_app() -> Flask:
 	app.register_blueprint(ai_bp, url_prefix="/api/ai")
 	app.register_blueprint(progress_bp, url_prefix="/api")
 	app.register_blueprint(analytics_bp, url_prefix="/api")
+	app.register_blueprint(resources_bp, url_prefix="/api")
 
 	# Error handlers
 	@app.errorhandler(400)

@@ -20,6 +20,76 @@ class InMemoryRepository(Repository):
 		self.ai_diagnostics: Dict[str, Dict[str, Any]] = {}
 		self.study_plans: Dict[str, Dict[str, Any]] = {}
 		self.progress: List[Dict[str, Any]] = []
+		self.topics: Dict[str, Dict[str, Any]] = {}
+		self.resources: Dict[str, Dict[str, Any]] = {}
+
+		# Seed topics for JAMB Mathematics
+		math_topics = [
+			{"name": "Algebra", "description": "Linear equations, quadratic equations, polynomials", "jamb_weight": 0.15},
+			{"name": "Geometry", "description": "Shapes, angles, area, perimeter, volume", "jamb_weight": 0.12},
+			{"name": "Trigonometry", "description": "Sine, cosine, tangent, identities", "jamb_weight": 0.10},
+			{"name": "Calculus", "description": "Differentiation, integration, limits", "jamb_weight": 0.08},
+			{"name": "Statistics", "description": "Mean, median, mode, probability", "jamb_weight": 0.10},
+			{"name": "Number System", "description": "Real numbers, integers, fractions, decimals", "jamb_weight": 0.15},
+			{"name": "Sets", "description": "Union, intersection, Venn diagrams", "jamb_weight": 0.08},
+			{"name": "Sequences & Series", "description": "Arithmetic, geometric progressions", "jamb_weight": 0.07},
+			{"name": "Coordinate Geometry", "description": "Distance, midpoint, slope, equations", "jamb_weight": 0.10},
+			{"name": "Probability", "description": "Events, outcomes, conditional probability", "jamb_weight": 0.05},
+		]
+		algebra_topic_id = None
+		geometry_topic_id = None
+		for topic in math_topics:
+			tid = _uuid()
+			self.topics[tid] = {
+				"id": tid,
+				"name": topic["name"],
+				"description": topic["description"],
+				"prerequisite_topic_ids": [],
+				"jamb_weight": topic["jamb_weight"],
+			}
+			# Track IDs for resources
+			if topic["name"] == "Algebra":
+				algebra_topic_id = tid
+			elif topic["name"] == "Geometry":
+				geometry_topic_id = tid
+
+		# Seed sample resources for some topics
+		
+		sample_resources = [
+			{
+				"topic_id": algebra_topic_id,
+				"type": "video",
+				"title": "Algebra Basics - Introduction to Linear Equations",
+				"url": "https://www.khanacademy.org/math/algebra/linear-equations",
+				"source": "Khan Academy",
+				"duration_minutes": 20,
+				"difficulty": "easy",
+				"upvotes": 0,
+			},
+			{
+				"topic_id": algebra_topic_id,
+				"type": "practice_set",
+				"title": "Algebra Practice Problems - JAMB Style",
+				"url": "https://www.example.com/practice/algebra",
+				"source": "StudyGapAI",
+				"duration_minutes": 45,
+				"difficulty": "medium",
+				"upvotes": 0,
+			},
+			{
+				"topic_id": geometry_topic_id,
+				"type": "video",
+				"title": "Geometry Fundamentals - Triangles and Circles",
+				"url": "https://www.khanacademy.org/math/geometry",
+				"source": "Khan Academy",
+				"duration_minutes": 30,
+				"difficulty": "medium",
+				"upvotes": 0,
+			},
+		]
+		for resource in sample_resources:
+			rid = _uuid()
+			self.resources[rid] = {"id": rid, **resource}
 
 		# Seed a minimal question bank per schema for local testing
 		for i in range(50):
@@ -116,8 +186,54 @@ class InMemoryRepository(Repository):
 
 	# AI Diagnostics / Study Plans
 	def save_ai_diagnostic(self, diagnostic: Dict[str, Any]) -> Dict[str, Any]:
+		"""
+		Save AI diagnostic with comprehensive format.
+		Decision 10: Option B - Store both analysis_result and denormalized fields
+		"""
 		did = _uuid()
-		payload = {**diagnostic, "id": did}
+		
+		# Extract analysis_result if provided, otherwise use diagnostic as analysis_result
+		analysis_result = diagnostic.get("analysis_result")
+		if not analysis_result:
+			analysis_result = {
+				"overall_performance": diagnostic.get("overall_performance"),
+				"topic_breakdown": diagnostic.get("topic_breakdown", []),
+				"root_cause_analysis": diagnostic.get("root_cause_analysis"),
+				"predicted_jamb_score": diagnostic.get("predicted_jamb_score"),
+				"study_plan": diagnostic.get("study_plan"),
+				"recommendations": diagnostic.get("recommendations", [])
+			}
+		
+		# Build payload with both analysis_result and denormalized fields
+		payload = {
+			"id": did,
+			"quiz_id": diagnostic.get("quiz_id"),
+			"analysis_result": analysis_result,
+			"overall_performance": diagnostic.get("overall_performance") or analysis_result.get("overall_performance"),
+			"topic_breakdown": diagnostic.get("topic_breakdown") or analysis_result.get("topic_breakdown", []),
+			"root_cause_analysis": diagnostic.get("root_cause_analysis") or analysis_result.get("root_cause_analysis"),
+			"predicted_jamb_score": diagnostic.get("predicted_jamb_score") or analysis_result.get("predicted_jamb_score"),
+			"study_plan": diagnostic.get("study_plan") or analysis_result.get("study_plan"),
+			"recommendations": diagnostic.get("recommendations") or analysis_result.get("recommendations", []),
+		}
+		
+		# Extract legacy fields for backward compatibility
+		topic_breakdown = payload.get("topic_breakdown", [])
+		payload["weak_topics"] = [
+			{"topic": t.get("topic"), "accuracy": t.get("accuracy"), "severity": t.get("severity")}
+			for t in topic_breakdown if t.get("status") == "weak"
+		]
+		payload["strong_topics"] = [
+			{"topic": t.get("topic"), "accuracy": t.get("accuracy")}
+			for t in topic_breakdown if t.get("status") == "strong"
+		]
+		payload["analysis_summary"] = diagnostic.get("analysis_summary") or f"Diagnostic analysis for {payload.get('overall_performance', {}).get('accuracy', 0):.1f}% accuracy"
+		payload["projected_score"] = (payload.get("predicted_jamb_score") or {}).get("score", 0)
+		payload["foundational_gaps"] = [
+			{"gapDescription": r.get("action"), "affectedTopics": [r.get("category")]}
+			for r in payload.get("recommendations", []) if r.get("category") == "weakness"
+		]
+		
 		if not payload.get("generated_at"):
 			payload["generated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 		self.ai_diagnostics[did] = payload
@@ -159,5 +275,31 @@ class InMemoryRepository(Repository):
 				(sum(q.get("score_percentage", 0.0) for q in self.quizzes.values()) / max(1, len(self.quizzes)))
 			),
 		}
+
+	# Topics
+	def get_topics(self, subject: Optional[str] = None) -> List[Dict[str, Any]]:
+		"""Get all topics, optionally filtered by subject."""
+		# In-memory implementation doesn't filter by subject for now
+		# Subject filtering would require adding a subject field to topics
+		return list(self.topics.values())
+
+	# Resources
+	def get_resources(self, topic_id: Optional[str] = None, topic_name: Optional[str] = None) -> List[Dict[str, Any]]:
+		"""Get resources, optionally filtered by topic_id or topic_name."""
+		resources = list(self.resources.values())
+		
+		if topic_id:
+			resources = [r for r in resources if r.get("topic_id") == topic_id]
+		
+		if topic_name:
+			# Find topic by name first
+			topic = next((t for t in self.topics.values() if t.get("name") == topic_name), None)
+			if topic:
+				resources = [r for r in resources if r.get("topic_id") == topic.get("id")]
+			else:
+				# No topic found with that name, return empty
+				return []
+		
+		return resources
 
 

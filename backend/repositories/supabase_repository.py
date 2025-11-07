@@ -85,16 +85,74 @@ class SupabaseRepository(Repository):
 			return []
 
 	def create_quiz(self, quiz: Dict[str, Any]) -> Dict[str, Any]:
-		response = self.client.table("diagnostic_quizzes").insert(quiz).execute()
-		if response.data and len(response.data) > 0:
-			return response.data[0]
-		# Fallback: return quiz dict with generated ID
-		return quiz
+		"""
+		Create diagnostic quiz with enhanced schema.
+		Supports subject and time_taken_minutes fields.
+		"""
+		# Ensure required fields are present
+		quiz_payload = {
+			"user_id": quiz.get("user_id"),
+			"subject": quiz.get("subject", "Mathematics"),
+			"total_questions": quiz.get("total_questions", 30),
+			"time_taken_minutes": quiz.get("time_taken_minutes") or quiz.get("time_taken"),
+		}
+		
+		# Only add started_at and completed_at if they are provided and valid
+		if quiz.get("started_at"):
+			quiz_payload["started_at"] = quiz.get("started_at")
+		if quiz.get("completed_at"):
+			quiz_payload["completed_at"] = quiz.get("completed_at")
+		
+		try:
+			response = self.client.table("diagnostic_quizzes").insert(quiz_payload).execute()
+			if response.data and len(response.data) > 0:
+				return response.data[0]
+			# Fallback: return quiz dict with generated ID
+			return quiz_payload
+		except Exception as e:
+			# Log error and re-raise with more context
+			import logging
+			logging.error(f"Error creating quiz: {str(e)}, payload: {quiz_payload}")
+			raise
 
 	def save_quiz_responses(self, quiz_id: str, responses: List[Dict[str, Any]]) -> None:
-		self.client.table("quiz_responses").insert(responses).execute()
+		"""
+		Save quiz responses with enhanced schema.
+		Supports topic and confidence fields.
+		"""
+		# Transform responses to match new schema
+		transformed_responses = []
+		for resp in responses:
+			question_id = resp.get("question_id") or resp.get("questionId")
+			# question_id must be a valid UUID or None (database constraint)
+			# If it's not a valid UUID format, set it to None
+			if question_id:
+				try:
+					import uuid
+					# Try to validate as UUID
+					uuid.UUID(str(question_id))
+				except (ValueError, TypeError):
+					# Not a valid UUID, set to None
+					question_id = None
+			
+			transformed = {
+				"quiz_id": quiz_id,
+				"topic": resp.get("topic", "Unknown"),
+				"student_answer": resp.get("student_answer") or resp.get("studentAnswer"),
+				"correct_answer": resp.get("correct_answer") or resp.get("correctAnswer"),
+				"is_correct": resp.get("is_correct") if "is_correct" in resp else resp.get("isCorrect", False),
+				"confidence": resp.get("confidence"),
+				"explanation": resp.get("explanation") or resp.get("explanationText", ""),
+				"time_spent_seconds": resp.get("time_spent_seconds") or resp.get("timeSpentSeconds"),
+			}
+			# Only add question_id if it's a valid UUID
+			if question_id:
+				transformed["question_id"] = question_id
+			transformed_responses.append(transformed)
+		
+		self.client.table("quiz_responses").insert(transformed_responses).execute()
 
-		# compute quiz summary
+		# Compute quiz summary
 		res = (
 			self.client.table("quiz_responses")
 			.select("is_correct")
@@ -105,10 +163,28 @@ class SupabaseRepository(Repository):
 		correct = sum(1 for r in res_data if r.get("is_correct"))
 		total = len(res_data)
 		score = (correct / max(1, total)) * 100.0
-		self.client.table("diagnostic_quizzes").update({
+		
+		# Update quiz with summary
+		update_data = {
 			"correct_answers": correct,
 			"score_percentage": score,
-		}).eq("id", quiz_id).execute()
+		}
+		
+		# Add completed_at if not already set (check quiz, not responses)
+		# We'll check if the quiz already has completed_at set
+		quiz_check = (
+			self.client.table("diagnostic_quizzes")
+			.select("completed_at")
+			.eq("id", quiz_id)
+			.single()
+			.execute()
+		)
+		quiz_data = quiz_check.data if quiz_check and hasattr(quiz_check, 'data') else {}
+		if not quiz_data.get("completed_at"):
+			from datetime import datetime, timezone
+			update_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+		
+		self.client.table("diagnostic_quizzes").update(update_data).eq("id", quiz_id).execute()
 
 	def get_quiz_results(self, quiz_id: str) -> Dict[str, Any]:
 		try:
@@ -126,10 +202,61 @@ class SupabaseRepository(Repository):
 
 	# AI Diagnostics / Study Plans
 	def save_ai_diagnostic(self, diagnostic: Dict[str, Any]) -> Dict[str, Any]:
-		payload = {**diagnostic}
+		"""
+		Save AI diagnostic with comprehensive format.
+		Decision 10: Option B - Store both analysis_result and denormalized fields
+		"""
+		from datetime import datetime, timezone
+		
+		# Extract analysis_result if provided, otherwise use diagnostic as analysis_result
+		analysis_result = diagnostic.get("analysis_result")
+		if not analysis_result:
+			# If analysis_result not provided, assume diagnostic contains the full analysis
+			analysis_result = {
+				"overall_performance": diagnostic.get("overall_performance"),
+				"topic_breakdown": diagnostic.get("topic_breakdown", []),
+				"root_cause_analysis": diagnostic.get("root_cause_analysis"),
+				"predicted_jamb_score": diagnostic.get("predicted_jamb_score"),
+				"study_plan": diagnostic.get("study_plan"),
+				"recommendations": diagnostic.get("recommendations", [])
+			}
+		
+		# Build payload with both analysis_result and denormalized fields
+		payload = {
+			"quiz_id": diagnostic.get("quiz_id"),
+			"analysis_result": analysis_result,  # Complete analysis result
+			"overall_performance": diagnostic.get("overall_performance") or analysis_result.get("overall_performance"),
+			"topic_breakdown": diagnostic.get("topic_breakdown") or analysis_result.get("topic_breakdown", []),
+			"root_cause_analysis": diagnostic.get("root_cause_analysis") or analysis_result.get("root_cause_analysis"),
+			"predicted_jamb_score": diagnostic.get("predicted_jamb_score") or analysis_result.get("predicted_jamb_score"),
+			"study_plan": diagnostic.get("study_plan") or analysis_result.get("study_plan"),
+			"recommendations": diagnostic.get("recommendations") or analysis_result.get("recommendations", []),
+		}
+		
+		# Extract legacy fields for backward compatibility
+		topic_breakdown = payload.get("topic_breakdown", [])
+		weak_topics = [
+			{"topic": t.get("topic"), "accuracy": t.get("accuracy"), "severity": t.get("severity")}
+			for t in topic_breakdown if t.get("status") == "weak"
+		]
+		strong_topics = [
+			{"topic": t.get("topic"), "accuracy": t.get("accuracy")}
+			for t in topic_breakdown if t.get("status") == "strong"
+		]
+		
+		payload["weak_topics"] = weak_topics
+		payload["strong_topics"] = strong_topics
+		payload["analysis_summary"] = diagnostic.get("analysis_summary") or f"Diagnostic analysis for {payload.get('overall_performance', {}).get('accuracy', 0):.1f}% accuracy"
+		payload["projected_score"] = (payload.get("predicted_jamb_score") or {}).get("score", 0)
+		payload["foundational_gaps"] = [
+			{"gapDescription": r.get("action"), "affectedTopics": [r.get("category")]}
+			for r in payload.get("recommendations", []) if r.get("category") == "weakness"
+		]
+		
+		# Set generated_at if not provided
 		if "generated_at" not in payload:
-			from datetime import datetime, timezone
 			payload["generated_at"] = datetime.now(timezone.utc).isoformat()
+		
 		response = self.client.table("ai_diagnostics").insert(payload).execute()
 		if response.data and len(response.data) > 0:
 			return response.data[0]
@@ -202,5 +329,43 @@ class SupabaseRepository(Repository):
 			"total_quizzes": len(quizzes),
 			"avg_score": avg_score,
 		}
+
+	# Topics
+	def get_topics(self, subject: Optional[str] = None) -> List[Dict[str, Any]]:
+		"""Get all topics, optionally filtered by subject."""
+		try:
+			# Note: Subject filtering requires a subject field on topics table
+			# For now, return all topics
+			response = self.client.table("topics").select("*").execute()
+			if response and hasattr(response, 'data'):
+				return response.data
+			return []
+		except Exception:
+			return []
+
+	# Resources
+	def get_resources(self, topic_id: Optional[str] = None, topic_name: Optional[str] = None) -> List[Dict[str, Any]]:
+		"""Get resources, optionally filtered by topic_id or topic_name."""
+		try:
+			query = self.client.table("resources").select("*")
+			
+			if topic_id:
+				query = query.eq("topic_id", topic_id)
+			elif topic_name:
+				# First, find the topic by name
+				topic_response = self.client.table("topics").select("id").eq("name", topic_name).maybe_single().execute()
+				if topic_response and hasattr(topic_response, 'data') and topic_response.data:
+					topic_id = topic_response.data.get("id")
+					query = query.eq("topic_id", topic_id)
+				else:
+					# No topic found, return empty
+					return []
+			
+			response = query.execute()
+			if response and hasattr(response, 'data'):
+				return response.data
+			return []
+		except Exception:
+			return []
 
 

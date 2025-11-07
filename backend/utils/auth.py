@@ -119,7 +119,18 @@ def get_current_user_id() -> Optional[str]:
 	"""
 	Extract current user ID from Authorization header
 	Returns None if not authenticated
+	
+	In testing mode, allows bypassing auth if TESTING_AUTH_BYPASS is set
 	"""
+	# Allow auth bypass in testing mode
+	try:
+		from flask import current_app
+		if current_app and current_app.config.get("TESTING") and current_app.config.get("TESTING_AUTH_BYPASS"):
+			# Return a test user ID for testing
+			return "test-user-123"
+	except (RuntimeError, AttributeError):
+		pass
+	
 	auth_header = request.headers.get("Authorization")
 	if not auth_header:
 		return None
@@ -138,9 +149,21 @@ def require_auth(f):
 	"""
 	Decorator to require authentication for a route
 	Returns 401 if not authenticated
+	
+	In testing mode, allows bypassing auth if TESTING_AUTH_BYPASS is set
 	"""
 	@wraps(f)
 	def decorated_function(*args, **kwargs):
+		# Allow auth bypass in testing mode
+		try:
+			from flask import current_app
+			if current_app and current_app.config.get("TESTING") and current_app.config.get("TESTING_AUTH_BYPASS"):
+				# Use test user ID for testing
+				kwargs["current_user_id"] = "test-user-123"
+				return f(*args, **kwargs)
+		except (RuntimeError, AttributeError):
+			pass
+		
 		user_id = get_current_user_id()
 		if not user_id:
 			return jsonify({"error": "unauthorized", "message": "Authentication required"}), 401

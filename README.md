@@ -60,10 +60,10 @@ Frontend → Flask REST API → Supabase (PostgreSQL)
 | `POST` | `/api/users/login` | Authenticate user |
 | `GET` | `/api/questions` | Retrieve quiz questions |
 | `POST` | `/api/quiz/start` | Begin diagnostic quiz |
-| `POST` | `/api/quiz/:quizId/submit` | Submit quiz responses |
-| `POST` | `/api/ai/analyze-diagnostic` | AI feedback on performance |
-| `POST` | `/api/ai/generate-study-plan` | Create personalized study plan |
-| `GET` | `/api/users/:id/progress` | Get user’s study progress |
+| `POST` | `/api/ai/analyze-diagnostic` | AI diagnostic analysis (includes study plan) |
+| `GET` | `/api/users/me` | Get current user profile |
+| `GET` | `/api/progress/progress` | Get user's study progress |
+| `POST` | `/api/ai/explain-answer` | Get explanation for a question |
 
 ---
 
@@ -80,10 +80,13 @@ cd StudyGapAI
 Create a `.env` file based on `.env.example` and add your credentials:
 
 ```
-SUPABASE_URL=
-SUPABASE_KEY=
-GEMINI_API_KEY=
-JWT_SECRET=
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+GOOGLE_API_KEY=your-gemini-api-key
+AI_MODEL_NAME=gemini-1.5-flash
+AI_MOCK=false
+USE_IN_MEMORY_DB=false
 ```
 
 ### 3. Install dependencies
@@ -92,11 +95,13 @@ JWT_SECRET=
 pip install -r requirements.txt
 ```
 
-### 4. Run migrations / seed data
+### 4. Run database migrations
 
-```bash
-python setup_db.py
-```
+Run the SQL migrations in your Supabase project:
+- `supabase/migrations/0001_ai_se_enhanced_schema.sql`
+- `supabase/migrations/0002_ai_se_rls_policies.sql`
+
+See `dev_documentation/AI_SE_SETUP_GUIDE.md` for detailed setup instructions.
 
 ### 5. Start the development server
 

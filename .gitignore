@@ -63,3 +63,8 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Test outputs and debug files
+test_response.json
+*.log
+deploy_logs_*.txt
+

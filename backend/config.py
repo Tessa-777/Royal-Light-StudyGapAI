@@ -15,7 +15,9 @@ class AppConfig:
 
 	# AI
 	GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-	AI_MODEL_NAME = os.getenv("AI_MODEL_NAME", "gemini-2.5-flash")
+	# Valid model names: gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash-exp (experimental)
+	# Note: gemini-2.5-flash doesn't exist, use gemini-1.5-flash or gemini-2.0-flash-exp
+	AI_MODEL_NAME = os.getenv("AI_MODEL_NAME", "gemini-1.5-flash")
 	AI_MOCK = os.getenv("AI_MOCK", "true").lower() == "true"
 
 	# App
