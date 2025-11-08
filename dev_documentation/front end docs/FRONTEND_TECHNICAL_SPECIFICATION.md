@@ -68,12 +68,13 @@ VITE_SUPABASE_ANON_KEY=yeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmF
 
 ### 2.1 Landing Page (`/`)
 
-**Purpose:** Welcome screen, redirect to login or dashboard
+**Purpose:** Welcome screen, allow guest access to diagnostic quiz
 
 **Components:**
 - Hero section
-- CTA buttons (Get Started, Login)
+- CTA buttons (Take Diagnostic Quiz - primary, Login - secondary)
 - Feature highlights
+- **Guest mode support** - No login required for quiz
 
 **API Calls:**
 - None (static page)
@@ -83,23 +84,40 @@ VITE_SUPABASE_ANON_KEY=yeyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmF
 
 **User Flow:**
 - If authenticated → redirect to `/dashboard`
-- If not → show login/register options
+- If not authenticated → show landing page with "Take Diagnostic Quiz" CTA
+- **Primary CTA:** "Take Diagnostic Quiz" (allows guest access, no login required)
+- **Secondary CTA:** "Login" (for existing users)
+- User can take diagnostic quiz without creating account (guest mode)
 
 ---
 
 ### 2.2 Authentication Pages (`/login`, `/register`)
 
-**Purpose:** User authentication via Supabase Auth
+**Purpose:** User authentication via Supabase Auth (optional for quiz access)
+
+**Important:** Authentication is **OPTIONAL** for taking the diagnostic quiz. Users can:
+- Take quiz as guest (no login required)
+- View diagnostic results as guest
+- Create account later to save results
 
 **Components:**
 - Email/password form
 - Supabase Auth UI (optional)
 - Error message display
+- **Save Diagnostic Modal** (appears after registration/login if guest diagnostic exists)
 
 **API Calls:**
 - `POST /api/users/register` (sync user data after Supabase registration)
 - `POST /api/users/login` (optional - mainly uses Supabase Auth)
 - `GET /api/users/me` (fetch user profile after login)
+- `POST /api/ai/save-diagnostic` (save guest diagnostic to account after registration/login)
+
+**Post-Registration/Login Flow:**
+- After successful registration/login, check localStorage for `guest_diagnostic`
+- If unsaved diagnostic exists:
+  - Show modal: "We found unsaved diagnostic results. Would you like to save them?"
+  - User can choose "Save Results" or "Skip"
+  - If "Save Results": Call `/api/ai/save-diagnostic` to save diagnostic to account
 
 **State Variables:**
 - `email`, `password` (form state)
@@ -138,24 +156,41 @@ Headers: { "Authorization": "Bearer <jwt_token>" }
 
 **Purpose:** Display questions, capture answers, track time, collect confidence scores
 
+**Important: Guest Mode Supported**
+- **No authentication required** - Users can take quiz as guest
+- Quiz data stored in localStorage (temporary, client-side only)
+- Users can create account later to save results
+
 **Components:**
+- **Guest mode banner** (optional, shows "Taking quiz as guest - Create account to save results")
 - Question card (question text, options A-D)
 - Answer selector (radio buttons or buttons)
 - Confidence slider (1-5 scale) - **OPTIONAL** (backend infers if missing)
 - Explanation textarea (for student reasoning)
+  - **REQUIRED if answer is wrong** - Show error message if empty, block "Next" button
+  - **OPTIONAL if answer is correct** - Can be left empty
+  - Dynamic label: "Explain your reasoning (required)" or "Explain your reasoning (optional)"
+  - Validation: Check answer correctness, update requirement dynamically
 - Timer component
 - Progress bar
 - Navigation (Previous/Next/Submit)
 
 **API Calls:**
-- `GET /api/quiz/questions?total=30` (fetch questions)
-- `POST /api/quiz/quiz/start` (create quiz session)
-- `POST /api/quiz/quiz/<quiz_id>/submit` (submit responses - legacy endpoint)
+- `GET /api/quiz/questions?total=30` (fetch questions - **public, no auth required**)
+- `POST /api/ai/analyze-diagnostic` (submit quiz and get diagnostic - **auth optional for guest mode**)
+
+**Guest Mode Flow:**
+- No authentication token required
+- Quiz data stored in localStorage (key: `guest_quiz`)
+- After quiz submission, call `/api/ai/analyze-diagnostic` without auth token
+- Diagnostic results stored in localStorage (key: `guest_diagnostic`)
+- User can create account later to save results
 
 **State Variables:**
 ```typescript
 interface QuizState {
-  quizId: string | null;
+  isGuest: boolean; // NEW: Track if user is guest (no auth token)
+  quizId: string | null; // null for guest mode
   questions: Question[];
   currentQuestionIndex: number;
   responses: QuestionResponse[];
@@ -206,15 +241,31 @@ Headers: { "Authorization": "Bearer <token>" }
 ```
 
 **User Flow:**
-1. Load questions → store in state
-2. Start quiz → create quiz session, store `quizId`
-3. For each question:
+1. Load questions → store in state (no auth required)
+2. **For guest mode:**
+   - No quiz session creation (skip `/api/quiz/quiz/start`)
+   - Store quiz data in localStorage (auto-save)
+   - `quizId` remains null
+3. **For authenticated mode:**
+   - Start quiz → create quiz session via `/api/quiz/quiz/start`, store `quizId`
+   - Store quiz data in state (can also cache in localStorage)
+4. For each question:
    - Display question and options
    - Capture answer selection
+   - **Check if answer is correct or wrong**
+   - **If answer is wrong:** Explanation becomes REQUIRED
+     - Show error message if explanation is empty
+     - Block "Next" button if explanation is missing
+   - **If answer is correct:** Explanation remains OPTIONAL
    - Capture confidence (1-5 slider) - optional
-   - Capture explanation text - optional
+   - Capture explanation text (required for wrong answers, optional for correct)
    - Track time spent
-4. On submit → prepare `questions_list` array → call `/api/ai/analyze-diagnostic`
+   - **For guest mode:** Auto-save to localStorage after each answer
+5. On submit → prepare `questions_list` array → call `/api/ai/analyze-diagnostic`
+   - **Guest mode:** Call without auth token (diagnostic generated but not saved to database)
+   - **Authenticated mode:** Call with auth token (diagnostic saved to database)
+6. **For guest mode:** Store diagnostic in localStorage (key: `guest_diagnostic`)
+7. Navigate to diagnostic results page
 
 ---
 
@@ -222,7 +273,18 @@ Headers: { "Authorization": "Bearer <token>" }
 
 **Purpose:** Display AI-generated diagnostic report with analysis, topic breakdown, JAMB score projection, and study plan
 
+**Important: Guest Mode Supported**
+- **No authentication required** - Results displayed for guest users
+- Results stored in localStorage (temporary, client-side only)
+- **"Save Results" banner appears** - User can create account to save
+
 **Components:**
+- **"Save Results" Banner (Guest Mode):** Top of page, prominent
+  - Message: "Save your results and track your progress?"
+  - Primary Button: "Create Account" (blue, prominent)
+  - Secondary Link: "Continue Without Saving" (gray, less prominent)
+  - Dismissible: X button to close (optional)
+  - **Only shows for guest users** (no auth token)
 - Overall performance card (accuracy, correct answers, avg confidence)
 - JAMB score projection card (score, confidence interval)
 - Topic breakdown table/chart (weak/developing/strong topics with color coding)
@@ -232,15 +294,18 @@ Headers: { "Authorization": "Bearer <token>" }
 - Share/Download buttons
 
 **API Calls:**
-- `POST /api/ai/analyze-diagnostic` (submit quiz data, get diagnostic)
-- `GET /api/quiz/quiz/<quiz_id>/results` (fetch quiz results if already analyzed)
+- `POST /api/ai/analyze-diagnostic` (submit quiz data, get diagnostic - **auth optional for guest mode**)
+- `GET /api/quiz/quiz/<quiz_id>/results` (fetch quiz results if already analyzed - **auth required**)
+- `POST /api/ai/save-diagnostic` (save guest diagnostic to account after registration - **NEW**)
 
 **State Variables:**
 ```typescript
 interface DiagnosticState {
+  isGuest: boolean; // NEW: Track if user is guest (no auth token)
   diagnostic: AnalyzeDiagnosticResponse | null;
   loading: boolean;
   error: string | null;
+  showSavePrompt: boolean; // NEW: Show "Save Results" banner for guest users
 }
 
 interface AnalyzeDiagnosticResponse {
@@ -339,10 +404,20 @@ Headers: { "Authorization": "Bearer <token>" }
 
 **User Flow:**
 1. After quiz submission → call `/api/ai/analyze-diagnostic` with quiz data
+   - **Guest mode:** Call without auth token (diagnostic generated but not saved to database)
+   - **Authenticated mode:** Call with auth token (diagnostic saved to database)
 2. Show loading spinner (AI analysis takes 10-30 seconds)
 3. Display diagnostic report
-4. Cache diagnostic in React Query + LocalStorage
-5. Redirect to study plan page or show study plan preview
+4. **For guest users:**
+   - Store diagnostic in localStorage (key: `guest_diagnostic`)
+   - Show "Save Results" banner at top of page
+   - User can click "Create Account" → redirect to registration page
+   - User can click "Continue Without Saving" → dismiss banner
+   - Diagnostic remains in localStorage (can be saved later)
+5. **For authenticated users:**
+   - Cache diagnostic in React Query + LocalStorage
+   - Diagnostic is automatically saved to database
+6. Redirect to study plan page or show study plan preview
 
 ---
 
