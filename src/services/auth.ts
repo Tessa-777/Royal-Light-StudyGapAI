@@ -1,0 +1,359 @@
+/**
+ * Supabase Authentication Service
+ * Handles user authentication via Supabase Auth SDK
+ */
+
+import { createClient, SupabaseClient, AuthResponse, User } from '@supabase/supabase-js';
+import api from './api';
+import endpoints from './endpoints';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Missing Supabase environment variables');
+}
+
+export const supabase: SupabaseClient | null = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
+
+export interface SignUpData {
+  email: string;
+  password: string;
+  name: string;
+  phone?: string;
+}
+
+export interface SignInData {
+  email: string;
+  password: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string;
+  target_score: number;
+  created_at?: string;
+  last_active?: string;
+}
+
+/**
+ * Sign up a new user
+ * 
+ * Flow:
+ * 1. Register with Supabase Auth SDK
+ * 2. Store JWT token from Supabase session
+ * 3. Sync user data to backend (create user record in database)
+ */
+export const signUp = async (data: SignUpData): Promise<{ user: User | null; session: any | null; error: Error | null }> => {
+  if (!supabase) {
+    return { user: null, session: null, error: new Error('Supabase not configured') };
+  }
+
+  try {
+    console.log('[AUTH] Starting registration for:', data.email);
+    
+    // Step 1: Register with Supabase Auth SDK
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
+      options: {
+        data: {
+          name: data.name,
+          phone: data.phone || '',
+        },
+      },
+    });
+
+    if (authError) {
+      console.error('[AUTH] Supabase registration error:', authError);
+      return { user: null, session: null, error: authError };
+    }
+
+    console.log('[AUTH] Supabase registration successful. Session exists:', !!authData.session);
+    console.log('[AUTH] User:', authData.user?.email);
+
+    // Step 2: Store JWT token if session exists
+    if (authData.session) {
+      console.log('[AUTH] Storing JWT token in localStorage');
+      localStorage.setItem('auth_token', authData.session.access_token);
+      localStorage.setItem('user', JSON.stringify(authData.user));
+      console.log('[AUTH] JWT token stored:', authData.session.access_token.substring(0, 20) + '...');
+
+      // Step 3: Sync user data with backend
+      console.log('[AUTH] Syncing user data to backend...');
+      console.log('[AUTH] Backend URL:', endpoints.users.register);
+      try {
+        const backendResponse = await api.post(endpoints.users.register, {
+          email: data.email,
+          name: data.name,
+          phone: data.phone || '',
+        });
+        console.log('[AUTH] Backend sync successful:', backendResponse.status);
+        console.log('[AUTH] Backend response:', backendResponse.data);
+      } catch (backendError: any) {
+        console.error('[AUTH] Backend sync error:', backendError);
+        console.error('[AUTH] Error message:', backendError.message);
+        console.error('[AUTH] Error code:', backendError.code);
+        console.error('[AUTH] Error response:', backendError.response?.data);
+        console.error('[AUTH] Error status:', backendError.response?.status);
+        
+        // Check if it's a CORS/Network error
+        if (backendError.code === 'ERR_NETWORK' || backendError.message === 'Network Error') {
+          console.error('[AUTH] ⚠️ CORS ERROR: Backend is not returning CORS headers.');
+          console.error('[AUTH] ⚠️ Backend must allow requests from:', window.location.origin);
+          console.error('[AUTH] ⚠️ See BACKEND_CORS_FIX.md for instructions to fix CORS.');
+          // Don't throw error - user account is created in Supabase
+          // Backend sync will happen on next login or when CORS is fixed
+        }
+        
+        // If backend sync fails, we still have the Supabase account
+        // User can retry sync later or it will sync on next login
+        if (backendError.response?.status !== 409) { // 409 = user already exists (not a critical error)
+          console.warn('[AUTH] Backend sync failed but Supabase account created. User can sync on next login.');
+        } else {
+          console.log('[AUTH] User already exists in backend (409), this is OK');
+        }
+      }
+    } else {
+      // Supabase might require email confirmation
+      // In this case, session will be null until user confirms email
+      console.warn('[AUTH] No session returned - email confirmation may be required');
+      console.warn('[AUTH] User will need to confirm email before backend sync can happen');
+      // Store user data temporarily so we can sync after email confirmation
+      localStorage.setItem('pending_registration', JSON.stringify({
+        email: data.email,
+        name: data.name,
+        phone: data.phone || '',
+      }));
+    }
+
+    return { user: authData.user, session: authData.session, error: null };
+  } catch (error) {
+    console.error('[AUTH] Registration exception:', error);
+    return { user: null, session: null, error: error as Error };
+  }
+};
+
+/**
+ * Sign in an existing user
+ * 
+ * Flow:
+ * 1. Login with Supabase Auth SDK
+ * 2. Store JWT token from Supabase session
+ * 3. Get user profile from backend (to sync data if needed)
+ */
+export const signIn = async (data: SignInData): Promise<{ user: User | null; session: any | null; profile: UserProfile | null; error: Error | null }> => {
+  if (!supabase) {
+    return { user: null, session: null, profile: null, error: new Error('Supabase not configured') };
+  }
+
+  try {
+    console.log('[AUTH] Starting login for:', data.email);
+    
+    // Step 1: Login with Supabase Auth SDK
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: data.email,
+      password: data.password,
+    });
+
+    if (authError) {
+      console.error('[AUTH] Supabase login error:', authError);
+      return { user: null, session: null, profile: null, error: authError };
+    }
+
+    if (!authData.session) {
+      console.error('[AUTH] No session returned from Supabase');
+      return { user: null, session: null, profile: null, error: new Error('No session returned from Supabase. Please confirm your email first.') };
+    }
+
+    console.log('[AUTH] Supabase login successful. Session exists:', !!authData.session);
+    console.log('[AUTH] User:', authData.user?.email);
+
+    // Step 2: Store JWT token
+    console.log('[AUTH] Storing JWT token in localStorage');
+    localStorage.setItem('auth_token', authData.session.access_token);
+    localStorage.setItem('user', JSON.stringify(authData.user));
+    console.log('[AUTH] JWT token stored:', authData.session.access_token.substring(0, 20) + '...');
+
+    // Check for pending registration data (from email confirmation flow)
+    const pendingRegistration = localStorage.getItem('pending_registration');
+    if (pendingRegistration) {
+      console.log('[AUTH] Found pending registration, syncing to backend...');
+      try {
+        const pendingData = JSON.parse(pendingRegistration);
+        await api.post(endpoints.users.register, {
+          email: pendingData.email,
+          name: pendingData.name,
+          phone: pendingData.phone || '',
+        });
+        console.log('[AUTH] Pending registration synced successfully');
+        localStorage.removeItem('pending_registration');
+      } catch (syncError: any) {
+        console.error('[AUTH] Failed to sync pending registration:', syncError);
+        if (syncError.response?.status !== 409) {
+          console.warn('[AUTH] Will try to sync on profile fetch');
+        }
+      }
+    }
+
+    // Step 3: Get user profile from backend
+    console.log('[AUTH] Fetching user profile from backend...');
+    let userProfile: UserProfile | null = null;
+    try {
+      userProfile = await getCurrentUser();
+      console.log('[AUTH] User profile fetched:', userProfile ? 'Success' : 'Not found');
+      
+      if (!userProfile) {
+        // If profile doesn't exist in backend, sync it
+        console.log('[AUTH] User profile not found in backend. Syncing...');
+        try {
+          const syncResponse = await api.post(endpoints.users.register, {
+            email: data.email,
+            name: authData.user.user_metadata?.name || '',
+            phone: authData.user.user_metadata?.phone || '',
+          });
+          console.log('[AUTH] User profile synced to backend:', syncResponse.status);
+          // Retry getting profile
+          userProfile = await getCurrentUser();
+          console.log('[AUTH] User profile after sync:', userProfile ? 'Success' : 'Still not found');
+        } catch (syncError: any) {
+          console.error('[AUTH] Failed to sync user profile:', syncError);
+          console.error('[AUTH] Sync error response:', syncError.response?.data);
+          console.error('[AUTH] Sync error status:', syncError.response?.status);
+        }
+      }
+    } catch (profileError: any) {
+      console.error('[AUTH] Failed to fetch user profile:', profileError);
+      console.error('[AUTH] Profile error response:', profileError.response?.data);
+      console.error('[AUTH] Profile error status:', profileError.response?.status);
+      // Continue even if profile fetch fails - user is still authenticated
+    }
+
+    return { user: authData.user, session: authData.session, profile: userProfile, error: null };
+  } catch (error) {
+    console.error('[AUTH] Login exception:', error);
+    return { user: null, session: null, profile: null, error: error as Error };
+  }
+};
+
+/**
+ * Sign out the current user
+ */
+export const signOut = async (): Promise<{ error: Error | null }> => {
+  if (!supabase) {
+    return { error: new Error('Supabase not configured') };
+  }
+
+  try {
+    const { error } = await supabase.auth.signOut();
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user');
+    return { error };
+  } catch (error) {
+    return { error: error as Error };
+  }
+};
+
+/**
+ * Get current user profile from backend
+ */
+export const getCurrentUser = async (): Promise<UserProfile | null> => {
+  try {
+    console.log('[AUTH] Fetching user profile from:', endpoints.users.me);
+    const response = await api.get(endpoints.users.me);
+    console.log('[AUTH] User profile received:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('[AUTH] Failed to fetch user profile:', error);
+    console.error('[AUTH] Error response:', error.response?.data);
+    console.error('[AUTH] Error status:', error.response?.status);
+    
+    // If 404, user doesn't exist in backend (this is OK, we'll sync)
+    if (error.response?.status === 404) {
+      console.log('[AUTH] User profile not found in backend (404)');
+      return null;
+    }
+    
+    // If 401, token is invalid
+    if (error.response?.status === 401) {
+      console.warn('[AUTH] Unauthorized (401) - token may be invalid');
+      return null;
+    }
+    
+    return null;
+  }
+};
+
+/**
+ * Get current session
+ */
+export const getSession = async () => {
+  if (!supabase) {
+    return null;
+  }
+  const { data: { session } } = await supabase.auth.getSession();
+  return session;
+};
+
+/**
+ * Check if user is authenticated
+ * Also validates that the token is still valid by checking Supabase session
+ */
+export const isAuthenticated = async (): Promise<boolean> => {
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    return false;
+  }
+
+  // Validate token with Supabase
+  if (supabase) {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error || !session) {
+        // Token is invalid, clear it
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user');
+        return false;
+      }
+      // Update token if it was refreshed
+      if (session.access_token !== token) {
+        localStorage.setItem('auth_token', session.access_token);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error validating session:', error);
+      return false;
+    }
+  }
+
+  // Fallback: just check if token exists
+  return !!token;
+};
+
+/**
+ * Check if user is authenticated (synchronous version)
+ * Use this for quick checks, but prefer async isAuthenticated() for validation
+ */
+export const isAuthenticatedSync = (): boolean => {
+  return !!localStorage.getItem('auth_token');
+};
+
+/**
+ * Get stored user from localStorage
+ */
+export const getStoredUser = (): User | null => {
+  const userStr = localStorage.getItem('user');
+  if (userStr) {
+    try {
+      return JSON.parse(userStr);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+

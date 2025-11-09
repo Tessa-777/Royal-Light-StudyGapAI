@@ -1,211 +1,152 @@
-# 🧠 StudyGapAI
+# StudyGapAI Frontend
 
-> **AI-powered learning diagnostics and personalized study plan generator for African students.**
->
-> Built for [Hackathon Name], StudyGapAI identifies each learner’s unique strengths and weaknesses using adaptive quizzes and AI analysis — generating a tailored study roadmap to close learning gaps and boost exam readiness.
+React + Vite + TailwindCSS frontend for StudyGapAI - an AI-powered diagnostic tool that identifies hidden knowledge gaps holding Nigerian JAMB students back.
 
----
+## 🚀 Features
 
-## 🚀 Overview
+- **Guest Mode**: Take diagnostic quiz without login
+- **AI-Powered Diagnostics**: Get personalized analysis of strengths and weaknesses
+- **Study Plans**: 6-week personalized study plans
+- **Progress Tracking**: Monitor improvement over time
+- **Resource Library**: Access curated learning resources
 
-**StudyGapAI** is a smart educational platform designed to support students preparing for standardized exams such as **JAMB** and **WAEC**.  
-It combines **Flask**, **Supabase**, and **Gemini AI** to provide real-time diagnostic feedback, personalized study plans, and curated learning resources.
+## 🛠️ Tech Stack
 
-### 🎯 Core Objectives
-- Identify academic knowledge gaps through adaptive quizzes  
-- Provide AI-driven diagnostic feedback per subject/topic  
-- Generate individualized study plans and track progress  
-- Recommend focused learning resources to close skill gaps  
-- Make quality academic support more accessible across Africa  
+- **Framework**: React 18+ with Vite
+- **Styling**: TailwindCSS (mobile-first)
+- **Routing**: React Router v6
+- **State Management**: React Query (TanStack Query) for server state
+- **API Client**: Axios
+- **Auth**: Supabase Auth SDK (JWT tokens)
+- **Charts**: Recharts
 
----
-
-## 🧩 Tech Stack
-
-| Layer | Technology | Purpose |
-|-------|-------------|----------|
-| **Backend** | Flask (Python) | Core API & business logic |
-| **Database** | Supabase (PostgreSQL) | Data storage, auth & row-level security |
-| **AI Integration** | Gemini API (Google) | Diagnostic & study plan generation |
-| **Frontend** | React / Flutter (optional for demo) | Student interface |
-| **Hosting** | Railway / Render / Supabase Edge Functions | Deployment |
-| **Version Control** | Git + GitHub | Collaboration & tracking |
-
----
-
-## ⚙️ Features
-
-✅ **Adaptive Diagnostic Quizzes** — auto-selects questions by difficulty and topic  
-✅ **AI-Powered Feedback** — summarizes performance, predicts scores, highlights weak topics  
-✅ **Personalized Study Plans** — week-by-week roadmap tailored to each learner  
-✅ **Resource Recommendations** — curated lessons and exercises for targeted improvement  
-✅ **Progress Tracking** — visualized improvement over time  
-✅ **Secure User Accounts** — managed through Supabase authentication  
-
----
-
-## 🧠 System Architecture
-
-```
-
-Frontend → Flask REST API → Supabase (PostgreSQL)
-↘︎ Gemini AI → Analysis & Study Plan Generation
-
-````
-
-### Key API Endpoints
-| Method | Endpoint | Description |
-|---------|-----------|-------------|
-| `POST` | `/api/users/register` | Register new user |
-| `POST` | `/api/users/login` | Authenticate user |
-| `GET` | `/api/questions` | Retrieve quiz questions |
-| `POST` | `/api/quiz/start` | Begin diagnostic quiz |
-| `POST` | `/api/quiz/:quizId/submit` | Submit quiz responses |
-| `POST` | `/api/ai/analyze-diagnostic` | AI feedback on performance |
-| `POST` | `/api/ai/generate-study-plan` | Create personalized study plan |
-| `GET` | `/api/users/:id/progress` | Get user’s study progress |
-
----
-
-## 🧰 Setup Instructions
-
-### 1. Clone the repo
-```bash
-git clone https://github.com/<your-org-or-username>/StudyGapAI.git
-cd StudyGapAI
-````
-
-### 2. Create environment file
-
-Create a `.env` file based on `.env.example` and add your credentials:
-
-```
-SUPABASE_URL=
-SUPABASE_KEY=
-GEMINI_API_KEY=
-JWT_SECRET=
-```
-
-### 3. Install dependencies
+## 📦 Installation
 
 ```bash
-pip install -r requirements.txt
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
 ```
 
-### 4. Run migrations / seed data
+## 🔧 Environment Variables
+
+Create a `.env` file in the root directory:
+
+```env
+VITE_API_BASE_URL=http://localhost:5000/api
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+## 📁 Project Structure
+
+```
+src/
+├── components/
+│   ├── charts/          # Chart components (PieChart, BarChart, LineChart)
+│   ├── layout/          # Layout components (Header, Footer)
+│   └── ui/              # UI components (Button, Card, Input, etc.)
+├── hooks/               # Custom React hooks
+│   ├── useAuth.ts       # Authentication hook
+│   ├── useQuiz.ts       # Quiz management hook
+│   ├── useDiagnostic.ts # Diagnostic data hook
+│   ├── useResources.ts  # Resources hook
+│   └── useProgress.ts   # Progress tracking hook
+├── pages/               # Page components
+│   ├── LandingPage.tsx
+│   ├── QuizPage.tsx
+│   ├── DiagnosticResultsPage.tsx
+│   ├── StudyPlanPage.tsx
+│   ├── ProgressPage.tsx
+│   ├── ResourcesPage.tsx
+│   ├── LoginPage.tsx
+│   ├── RegisterPage.tsx
+│   └── DashboardPage.tsx
+├── services/            # API services
+│   ├── api.ts           # Axios instance
+│   ├── auth.ts          # Supabase Auth service
+│   └── endpoints.ts     # API endpoint constants
+└── lib/                 # Utility functions
+    └── utils.ts
+```
+
+## 🎯 Key Features
+
+### Guest Mode
+- Users can take diagnostic quiz without authentication
+- Quiz data stored in localStorage
+- Users can create account later to save results
+
+### Explanation Field Validation
+- Explanation is **REQUIRED** when answer is **WRONG**
+- Explanation is **OPTIONAL** when answer is **CORRECT**
+- Dynamic validation with error messages
+
+### Authentication
+- Supabase Auth integration
+- JWT token management
+- Protected routes
+- Save guest diagnostic after registration/login
+
+## 🚀 Deployment
+
+### Vercel Deployment
+
+1. Connect GitHub repository to Vercel
+2. Set build command: `npm run build`
+3. Set output directory: `dist`
+4. Add environment variables:
+   - `VITE_API_BASE_URL`
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+
+## 📝 API Integration
+
+The frontend communicates with the backend API at `VITE_API_BASE_URL`. Key endpoints:
+
+- `POST /api/ai/analyze-diagnostic` - Submit quiz and get diagnostic
+- `GET /api/quiz/questions` - Fetch quiz questions
+- `POST /api/ai/save-diagnostic` - Save guest diagnostic to account
+- `GET /api/users/me` - Get current user profile
+- `GET /api/resources` - Fetch resources by topic
+- `GET /api/topics` - Fetch all topics
+
+## 🧪 Testing
 
 ```bash
-python setup_db.py
+# Run linter
+npm run lint
+
+# Type checking
+npm run type-check
 ```
 
-### 5. Start the development server
+## 📚 Documentation
 
-```bash
-flask run
-```
+- [Frontend Technical Specification](./front%20end%20docs/FRONTEND_TECHNICAL_SPECIFICATION.md)
+- [Repository Setup Guide](./front%20end%20docs/FRONTEND_REPOSITORY_SETUP.md)
+- [Guest Quiz Flow](./front%20end%20docs/GUEST_QUIZ_FLOW.md)
+- [Explanation Field Update](./front%20end%20docs/EXPLANATION_FIELD_UPDATE.md)
 
-Your backend API will run at:
-➡️ `http://localhost:5000/api`
+## 🤝 Contributing
 
----
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
-## 📊 Database Schema Overview
+## 📄 License
 
-| Table                | Description                       |
-| -------------------- | --------------------------------- |
-| `users`              | Student accounts and profile info |
-| `topics`             | Academic subjects/topics          |
-| `questions`          | Quiz question bank                |
-| `diagnostic_quizzes` | Quiz sessions per user            |
-| `quiz_responses`     | Recorded answers and scores       |
-| `ai_diagnostics`     | AI analysis outputs               |
-| `study_plans`        | Personalized weekly study plans   |
-| `progress_tracking`  | Ongoing performance data          |
-| `resources`          | Recommended learning materials    |
+See LICENSE file for details.
 
----
+## 🆘 Support
 
-## 🧠 AI Logic Overview
-
-1. **Analyze Diagnostic:**
-   Gemini processes quiz responses and returns:
-
-   * Topic strengths & weaknesses
-   * Projected score
-   * Recommended improvement areas
-
-2. **Generate Study Plan:**
-   Based on diagnostics, the AI builds:
-
-   * Week-by-week study schedule
-   * Recommended resources
-   * Goal tracking roadmap
-
----
-
-## 🧑‍💻 Example API Flow
-
-```bash
-# Start quiz
-POST /api/quiz/start
-→ returns quizId and question list
-
-# Submit answers
-POST /api/quiz/{quizId}/submit
-→ saves responses and calculates raw score
-
-# Get AI analysis
-POST /api/ai/analyze-diagnostic
-→ returns topic-level feedback and recommendations
-
-# Get study plan
-POST /api/ai/generate-study-plan
-→ returns custom plan JSON
-```
-
----
-
-## 🎨 UI Concept (optional demo)
-
-* Dashboard showing current progress and AI insights
-* Study planner with upcoming goals
-* Resource list dynamically filtered by weak topics
-
----
-
-## 🧩 Team Roles (edit as needed)
-
-| Role                          | Member | Responsibility              |
-| ----------------------------- | ------ | --------------------------- |
-| **Team Lead / Data Engineer** | [Name] | Architecture, integrations  |
-| **Backend Developer**         | [Name] | Flask API, Supabase, Gemini |
-| **Frontend Developer**        | [Name] | React / Flutter UI          |
-| **AI Engineer**               | [Name] | Prompt design, Gemini logic |
-| **Project Manager**           | [Name] | Coordination & submission   |
-
----
-
-## 🏆 Hackathon Vision
-
-> We believe education is the foundation for opportunity.
-> **StudyGapAI** bridges the gap between students and personalized learning — giving every learner access to intelligent academic support, regardless of background or resources.
-
----
-
-## 📜 License
-
-This project is licensed under the **MIT License** — see `LICENSE` for details.
-
----
-
-## 💬 Contact
-
-For questions or collaboration:
-
-* 📧 [[your-email@example.com](mailto:your-email@example.com)]
-* 🌐 [project-website-or-linktree]
-* 🐙 [GitHub](https://github.com/<your-org-or-username>/StudyGapAI)
-
----
-
-> Made with ❤️ by Team Royal Light for WUD Hackathon 2025.
+For issues and questions, please open an issue on GitHub.
