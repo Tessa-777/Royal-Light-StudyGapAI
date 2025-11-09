@@ -6,6 +6,7 @@ class RegisterRequest(BaseModel):
 	email: str
 	name: str
 	phone: Optional[str] = None
+	targetScore: Optional[int] = Field(default=None, ge=0, le=400, description="Target JAMB score (0-400)")
 
 
 class LoginRequest(BaseModel):

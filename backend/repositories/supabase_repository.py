@@ -31,63 +31,131 @@ class SupabaseRepository(Repository):
 
 	# Users
 	def upsert_user(self, user: Dict[str, Any]) -> Dict[str, Any]:
-		# Upsert operation - Supabase returns data automatically
-		try:
-			response = self.client.table("users").upsert(user).execute()
+		"""
+		Upsert user to database.
+		Supports all user fields including: id, email, name, phone, target_score
+		"""
+		# Prepare user data - ensure all fields are properly formatted
+		user_data = {
+			"email": user.get("email"),
+			"name": user.get("name"),
+		}
+		
+		# Add optional fields if provided
+		if "phone" in user:
+			user_data["phone"] = user.get("phone")
+		
+		# Add target_score if provided (convert to int if needed)
+		if "target_score" in user:
+			target_score = user.get("target_score")
+			if target_score is not None:
+				try:
+					user_data["target_score"] = int(target_score)
+				except (ValueError, TypeError):
+					logger.warning(f"Invalid target_score value: {target_score}, skipping")
+		
+		# Add user_id if provided
+		if "id" in user and user.get("id"):
+			user_data["id"] = user.get("id")
+		
+		def _upsert_user():
+			# Upsert operation - Supabase returns data automatically
+			response = self.client.table("users").upsert(user_data).execute()
 			# If data is returned, use it
 			if response.data and len(response.data) > 0:
+				logger.info(f"User upserted: {response.data[0].get('id')}, target_score: {response.data[0].get('target_score')}")
 				return response.data[0]
-		except Exception:
-			pass  # Fall through to query by email
+			# If no data returned, return user_data as fallback
+			return user_data
+		
+		# Use retry logic for database operations
+		try:
+			result = self._execute_with_retry(_upsert_user)
+			if result:
+				return result
+		except Exception as e:
+			logger.error(f"Error upserting user: {str(e)}", exc_info=True)
+			# Fall through to query by email
 		
 		# Fallback: query the user by email to get full data
-		email = user.get("email")
+		email = user_data.get("email")
 		if email:
-			user_data = self.get_user_by_email(email)
-			if user_data:
-				return user_data
+			try:
+				user_data_from_db = self.get_user_by_email(email)
+				if user_data_from_db:
+					# If we have target_score in request but not in DB, update it
+					if "target_score" in user_data and user_data["target_score"] is not None:
+						if user_data_from_db.get("target_score") != user_data["target_score"]:
+							# Update target_score
+							updated_user = self.update_user_target_score(user_data_from_db["id"], user_data["target_score"])
+							return updated_user
+					return user_data_from_db
+			except Exception as e:
+				logger.warning(f"Error querying user by email: {str(e)}")
 		
 		# Last resort: return user dict (will have generated ID from database)
 		# Generate a UUID if not present
-		if "id" not in user:
+		if "id" not in user_data:
 			import uuid
-			user["id"] = str(uuid.uuid4())
-		return user
+			user_data["id"] = str(uuid.uuid4())
+		return user_data
 
 	def get_user(self, user_id: str) -> Optional[Dict[str, Any]]:
-		try:
+		def _get_user():
 			response = self.client.table("users").select("*").eq("id", user_id).maybe_single().execute()
 			if response and hasattr(response, 'data'):
 				return response.data
 			return None
-		except Exception:
+		
+		try:
+			return self._execute_with_retry(_get_user)
+		except Exception as e:
+			logger.error(f"Error getting user {user_id}: {str(e)}", exc_info=True)
 			return None
 
 	def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
-		try:
+		def _get_user_by_email():
 			response = (
 				self.client.table("users").select("*").eq("email", email).maybe_single().execute()
 			)
 			if response and hasattr(response, 'data'):
 				return response.data
 			return None
-		except Exception:
+		
+		try:
+			return self._execute_with_retry(_get_user_by_email)
+		except Exception as e:
+			logger.error(f"Error getting user by email {email}: {str(e)}", exc_info=True)
 			return None
 
 	def update_user_target_score(self, user_id: str, target_score: int) -> Dict[str, Any]:
-		response = (
-			self.client.table("users")
-			.update({"target_score": target_score})
-			.eq("id", user_id)
-			.execute()
-		)
-		if response.data and len(response.data) > 0:
-			return response.data[0]
-		# Fallback: query the user
-		user = self.get_user(user_id)
-		if user:
-			return user
-		raise KeyError(f"User {user_id} not found")
+		def _update_target_score():
+			response = (
+				self.client.table("users")
+				.update({"target_score": int(target_score)})
+				.eq("id", user_id)
+				.execute()
+			)
+			if response.data and len(response.data) > 0:
+				logger.info(f"Updated target_score for user {user_id}: {target_score}")
+				return response.data[0]
+			# Fallback: query the user
+			user = self.get_user(user_id)
+			if user:
+				return user
+			raise KeyError(f"User {user_id} not found")
+		
+		try:
+			return self._execute_with_retry(_update_target_score)
+		except KeyError:
+			raise
+		except Exception as e:
+			logger.error(f"Error updating target_score for user {user_id}: {str(e)}", exc_info=True)
+			# Fallback: query the user
+			user = self.get_user(user_id)
+			if user:
+				return user
+			raise KeyError(f"User {user_id} not found") from e
 
 	# Questions / Quizzes
 	def get_diagnostic_questions(

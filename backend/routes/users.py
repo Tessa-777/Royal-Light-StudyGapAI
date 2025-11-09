@@ -30,21 +30,37 @@ def register():
 	# Get user_id from JWT if authenticated, otherwise from request
 	user_id = get_current_user_id() or data.get("userId")
 	
+	# Extract target_score from request (support both camelCase and snake_case)
+	target_score = data.get("targetScore") or data.get("target_score")
+	if target_score is not None:
+		try:
+			target_score = int(target_score)
+		except (ValueError, TypeError):
+			current_app.logger.warning(f"Invalid target_score value: {target_score}, ignoring")
+			target_score = None
+	
+	# Build user data dictionary
+	user_data = {
+		"email": data["email"],
+		"name": data["name"],
+		"phone": data.get("phone")
+	}
+	
+	# Add target_score if provided
+	if target_score is not None:
+		user_data["target_score"] = target_score
+	
+	# Add user_id if authenticated
 	if user_id:
-		# User is authenticated - sync to users table
-		user = _repo().upsert_user({
-			"id": user_id,
-			"email": data["email"],
-			"name": data["name"],
-			"phone": data.get("phone")
-		})
+		user_data["id"] = user_id
+		current_app.logger.info(f"Registering authenticated user: {user_id}, target_score: {target_score}")
 	else:
-		# Fallback: create user without auth (for backward compatibility)
-		user = _repo().upsert_user({
-			"email": data["email"],
-			"name": data["name"],
-			"phone": data.get("phone")
-		})
+		current_app.logger.info(f"Registering user without auth, target_score: {target_score}")
+	
+	# Upsert user to database
+	user = _repo().upsert_user(user_data)
+	
+	current_app.logger.info(f"User registered: {user.get('id')}, target_score: {user.get('target_score')}")
 	return jsonify(user), 201
 
 
