@@ -1,9 +1,27 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen, Brain, Calendar, CheckCircle2, ArrowRight } from 'lucide-react';
 import Button from '../components/ui/Button';
+import { useAuth } from '../hooks/useAuth';
+import { isAuthenticatedSync } from '../services/auth';
+import { useEffect } from 'react';
 
 const LandingPage = () => {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  
+  // Redirect to dashboard if user is already logged in
+  useEffect(() => {
+    if (isAuthenticatedSync()) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Don't render if user is authenticated (will redirect)
+  if (isAuthenticatedSync()) {
+    return null;
+  }
+
   return (
     <div className="w-full">
       {/* Hero Section */}
@@ -24,11 +42,6 @@ const LandingPage = () => {
                 <Link to="/quiz">
                   <Button variant="primary" size="lg" className="w-full sm:w-auto">
                     Take Diagnostic Quiz
-                  </Button>
-                </Link>
-                <Link to="/login">
-                  <Button variant="secondary" size="lg" className="w-full sm:w-auto">
-                    Login
                   </Button>
                 </Link>
               </div>

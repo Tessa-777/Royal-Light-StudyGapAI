@@ -108,21 +108,44 @@ export const useDiagnostic = (diagnosticId?: string) => {
           console.log('[useDiagnostic] Diagnostic not found in nested structure, trying root level');
           return response.data as AnalyzeDiagnosticResponse;
         } catch (error: any) {
-          // If API call fails (404 or 403), check localStorage for guest diagnostic
-          // 403 = Forbidden (quiz doesn't belong to user, likely a guest quiz)
+          // If API call fails (404 or 403), handle accordingly
+          // 403 = Forbidden (quiz doesn't belong to user, likely a guest quiz or wrong user)
           // 404 = Not Found (quiz doesn't exist or quiz_id is null/invalid)
-          // This handles the case where guest diagnostic was saved but quiz_id doesn't exist in database
-          // or belongs to a different user (guest quiz)
-          if (error?.response?.status === 404 || error?.response?.status === 403) {
-            console.warn(`[useDiagnostic] Diagnostic not accessible (${error?.response?.status}) - checking localStorage for guest diagnostic`);
+          if (error?.response?.status === 403) {
+            console.warn('[useDiagnostic] 403 Forbidden - quiz does not belong to current user');
+            console.warn('[useDiagnostic] Clearing invalid latest_quiz_id from localStorage');
+            // Clear the invalid quiz_id - it doesn't belong to this user
+            const storedQuizId = localStorage.getItem('latest_quiz_id');
+            if (storedQuizId === diagnosticId) {
+              localStorage.removeItem('latest_quiz_id');
+              console.log('[useDiagnostic] Removed invalid latest_quiz_id from localStorage');
+            }
+            // Check localStorage for guest diagnostic as fallback
             const guestDiagnostic = localStorage.getItem('guest_diagnostic');
             if (guestDiagnostic) {
               try {
                 const data = JSON.parse(guestDiagnostic);
                 console.log('[useDiagnostic] Found guest diagnostic in localStorage - using as fallback');
                 if (data.diagnostic) {
-                  // For guest diagnostics, quiz_id might be null - that's OK
-                  console.log('[useDiagnostic] Returning guest diagnostic (quiz_id may be null)');
+                  return data.diagnostic as AnalyzeDiagnosticResponse;
+                }
+                return data as AnalyzeDiagnosticResponse;
+              } catch (parseError) {
+                console.error('[useDiagnostic] Error parsing guest diagnostic:', parseError);
+              }
+            }
+            // Throw error to indicate no diagnostic available
+            throw new Error('Quiz does not belong to current user');
+          }
+          if (error?.response?.status === 404) {
+            console.warn('[useDiagnostic] 404 Not Found - quiz does not exist');
+            // Check localStorage for guest diagnostic as fallback
+            const guestDiagnostic = localStorage.getItem('guest_diagnostic');
+            if (guestDiagnostic) {
+              try {
+                const data = JSON.parse(guestDiagnostic);
+                console.log('[useDiagnostic] Found guest diagnostic in localStorage - using as fallback');
+                if (data.diagnostic) {
                   return data.diagnostic as AnalyzeDiagnosticResponse;
                 }
                 return data as AnalyzeDiagnosticResponse;

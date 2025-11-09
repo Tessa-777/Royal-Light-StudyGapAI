@@ -83,6 +83,15 @@ const StudyPlanPage = () => {
             </Card>
           ))}
         </div>
+
+        {/* Back to Dashboard Button */}
+        <div className="mt-8 text-center">
+          <Link to="/dashboard">
+            <Button variant="secondary" size="lg">
+              Back to Dashboard
+            </Button>
+          </Link>
+        </div>
       </div>
     </div>
   );

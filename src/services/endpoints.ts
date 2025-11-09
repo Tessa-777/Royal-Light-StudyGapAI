@@ -12,6 +12,7 @@ export const endpoints = {
     login: `${API_BASE_URL}/users/login`,
     me: `${API_BASE_URL}/users/me`,
     updateTargetScore: (userId: string) => `${API_BASE_URL}/users/${userId}/target-score`,
+    latestDiagnostic: `${API_BASE_URL}/users/me/diagnostics/latest`,
   },
 
   // Quiz Management

@@ -23,6 +23,7 @@ export interface SignUpData {
   password: string;
   name: string;
   phone?: string;
+  targetScore?: number;
 }
 
 export interface SignInData {
@@ -38,6 +39,8 @@ export interface UserProfile {
   target_score: number;
   created_at?: string;
   last_active?: string;
+  has_diagnostic?: boolean;
+  latest_diagnostic_id?: string;
 }
 
 /**
@@ -48,9 +51,9 @@ export interface UserProfile {
  * 2. Store JWT token from Supabase session
  * 3. Sync user data to backend (create user record in database)
  */
-export const signUp = async (data: SignUpData): Promise<{ user: User | null; session: any | null; error: Error | null }> => {
+export const signUp = async (data: SignUpData): Promise<{ user: User | null; session: any | null; profile: UserProfile | null; error: Error | null }> => {
   if (!supabase) {
-    return { user: null, session: null, error: new Error('Supabase not configured') };
+    return { user: null, session: null, profile: null, error: new Error('Supabase not configured') };
   }
 
   try {
@@ -70,20 +73,56 @@ export const signUp = async (data: SignUpData): Promise<{ user: User | null; ses
 
     if (authError) {
       console.error('[AUTH] Supabase registration error:', authError);
-      return { user: null, session: null, error: authError };
+      return { user: null, session: null, profile: null, error: authError };
     }
 
     console.log('[AUTH] Supabase registration successful. Session exists:', !!authData.session);
     console.log('[AUTH] User:', authData.user?.email);
 
-    // Step 2: Store JWT token if session exists
-    if (authData.session) {
-      console.log('[AUTH] Storing JWT token in localStorage');
-      localStorage.setItem('auth_token', authData.session.access_token);
-      localStorage.setItem('user', JSON.stringify(authData.user));
-      console.log('[AUTH] JWT token stored:', authData.session.access_token.substring(0, 20) + '...');
+    // Declare userProfile outside the if block so it's accessible in the return statement
+    let userProfile: UserProfile | null = null;
 
-      // Step 3: Sync user data with backend
+      // Step 2: Store JWT token if session exists
+      if (authData.session) {
+        console.log('[AUTH] Storing JWT token in localStorage');
+        localStorage.setItem('auth_token', authData.session.access_token);
+        localStorage.setItem('user', JSON.stringify(authData.user));
+        console.log('[AUTH] JWT token stored:', authData.session.access_token.substring(0, 20) + '...');
+
+        // Step 2.5: Save guest diagnostic if it exists (BEFORE clearing)
+        // This must happen after token is stored but before clearing guest data
+        const { saveGuestDiagnostic } = await import('./guestDiagnostic');
+        const guestDiagnostic = localStorage.getItem('guest_diagnostic');
+        const guestQuiz = localStorage.getItem('guest_quiz');
+        
+        if (guestDiagnostic && guestQuiz) {
+          console.log('[AUTH] Found guest diagnostic and quiz - saving to account...');
+          try {
+            const saveResult = await saveGuestDiagnostic();
+            if (saveResult.success) {
+              console.log('[AUTH] Guest diagnostic saved successfully');
+              if (saveResult.quizId) {
+                console.log('[AUTH] Quiz ID:', saveResult.quizId);
+              }
+            } else {
+              console.warn('[AUTH] Failed to save guest diagnostic:', saveResult.error);
+              // Continue with registration even if save fails - user can save manually later
+            }
+          } catch (saveError) {
+            console.error('[AUTH] Error saving guest diagnostic:', saveError);
+            // Continue with registration even if save fails
+          }
+        } else {
+          // Clear guest data if no diagnostic exists (cleanup)
+          console.log('[AUTH] No guest diagnostic found - clearing any stale guest data');
+          localStorage.removeItem('guest_diagnostic');
+          localStorage.removeItem('guest_quiz');
+          localStorage.removeItem('guest_quiz_complete');
+          localStorage.removeItem('guest_banner_dismissed');
+          localStorage.removeItem('latest_quiz_id'); // Clear previous user's quiz ID
+        }
+
+        // Step 3: Sync user data with backend
       console.log('[AUTH] Syncing user data to backend...');
       console.log('[AUTH] Backend URL:', endpoints.users.register);
       try {
@@ -91,9 +130,22 @@ export const signUp = async (data: SignUpData): Promise<{ user: User | null; ses
           email: data.email,
           name: data.name,
           phone: data.phone || '',
+          target_score: data.targetScore || 300,
         });
         console.log('[AUTH] Backend sync successful:', backendResponse.status);
         console.log('[AUTH] Backend response:', backendResponse.data);
+        
+        // Step 3.5: Fetch user profile after successful registration to get the saved target_score
+        try {
+          userProfile = await getCurrentUser();
+          console.log('[AUTH] User profile fetched after registration:', userProfile ? 'Success' : 'Not found');
+          if (userProfile) {
+            console.log('[AUTH] Profile target_score:', userProfile.target_score);
+          }
+        } catch (profileError) {
+          console.error('[AUTH] Failed to fetch profile after registration:', profileError);
+          // Continue even if profile fetch fails
+        }
       } catch (backendError: any) {
         console.error('[AUTH] Backend sync error:', backendError);
         console.error('[AUTH] Error message:', backendError.message);
@@ -131,10 +183,10 @@ export const signUp = async (data: SignUpData): Promise<{ user: User | null; ses
       }));
     }
 
-    return { user: authData.user, session: authData.session, error: null };
+    return { user: authData.user, session: authData.session, profile: userProfile || null, error: null };
   } catch (error) {
     console.error('[AUTH] Registration exception:', error);
-    return { user: null, session: null, error: error as Error };
+    return { user: null, session: null, profile: null, error: error as Error };
   }
 };
 
@@ -178,6 +230,46 @@ export const signIn = async (data: SignInData): Promise<{ user: User | null; ses
     localStorage.setItem('auth_token', authData.session.access_token);
     localStorage.setItem('user', JSON.stringify(authData.user));
     console.log('[AUTH] JWT token stored:', authData.session.access_token.substring(0, 20) + '...');
+
+    // Step 2.5: Save guest diagnostic if it exists (BEFORE clearing)
+    // This must happen after token is stored but before clearing guest data
+    const { saveGuestDiagnostic } = await import('./guestDiagnostic');
+    const guestDiagnostic = localStorage.getItem('guest_diagnostic');
+    const guestQuiz = localStorage.getItem('guest_quiz');
+    
+    if (guestDiagnostic && guestQuiz) {
+      console.log('[AUTH] Found guest diagnostic and quiz - saving to account...');
+      try {
+        const saveResult = await saveGuestDiagnostic();
+        if (saveResult.success) {
+          console.log('[AUTH] Guest diagnostic saved successfully');
+          if (saveResult.quizId) {
+            console.log('[AUTH] Quiz ID:', saveResult.quizId);
+          }
+        } else {
+          console.warn('[AUTH] Failed to save guest diagnostic:', saveResult.error);
+          // Continue with login even if save fails - user can save manually later
+        }
+      } catch (saveError) {
+        console.error('[AUTH] Error saving guest diagnostic:', saveError);
+        // Continue with login even if save fails
+      }
+    } else {
+      // Clear guest data if no diagnostic exists (cleanup)
+      console.log('[AUTH] No guest diagnostic found - clearing any stale guest data');
+      localStorage.removeItem('guest_diagnostic');
+      localStorage.removeItem('guest_quiz');
+      localStorage.removeItem('guest_quiz_complete');
+      localStorage.removeItem('guest_banner_dismissed');
+    }
+    
+    // Clear latest_quiz_id on login - it might be from a guest session
+    // The backend will provide the correct quiz_id if the user has quizzes
+    // (But if we just saved a guest diagnostic, the quiz_id is already set)
+    if (!guestDiagnostic || !guestQuiz) {
+      localStorage.removeItem('latest_quiz_id');
+      console.log('[AUTH] Cleared latest_quiz_id - will be set from backend if user has quizzes');
+    }
 
     // Check for pending registration data (from email confirmation flow)
     const pendingRegistration = localStorage.getItem('pending_registration');
@@ -250,8 +342,15 @@ export const signOut = async (): Promise<{ error: Error | null }> => {
 
   try {
     const { error } = await supabase.auth.signOut();
+    // Clear all auth and user data
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user');
+    // Clear quiz/diagnostic data on logout
+    localStorage.removeItem('latest_quiz_id');
+    localStorage.removeItem('guest_diagnostic');
+    localStorage.removeItem('guest_quiz');
+    localStorage.removeItem('guest_quiz_complete');
+    localStorage.removeItem('guest_banner_dismissed');
     return { error };
   } catch (error) {
     return { error: error as Error };

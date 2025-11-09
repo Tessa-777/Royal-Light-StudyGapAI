@@ -131,10 +131,20 @@ npm run type-check
 
 ## 📚 Documentation
 
+All project documentation is organized in the [`docs/`](./docs/) folder:
+
+- **[Project Summary](./docs/PROJECT_SUMMARY.md)** - Complete project overview and current state
+- **[Implementation Summary](./docs/IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
+- **[Quick Start Guide](./docs/QUICK_START.md)** - Developer quick start
+- **[Troubleshooting Guide](./docs/TROUBLESHOOTING_GUIDE.md)** - Common issues and solutions
+
+### Frontend-Specific Docs
 - [Frontend Technical Specification](./front%20end%20docs/FRONTEND_TECHNICAL_SPECIFICATION.md)
 - [Repository Setup Guide](./front%20end%20docs/FRONTEND_REPOSITORY_SETUP.md)
 - [Guest Quiz Flow](./front%20end%20docs/GUEST_QUIZ_FLOW.md)
 - [Explanation Field Update](./front%20end%20docs/EXPLANATION_FIELD_UPDATE.md)
+
+See [docs/README.md](./docs/README.md) for a complete documentation index.
 
 ## 🤝 Contributing
 

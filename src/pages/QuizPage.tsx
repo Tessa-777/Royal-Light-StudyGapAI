@@ -371,6 +371,12 @@ const QuizPage = () => {
   };
 
   const handleSubmitQuiz = async () => {
+    // Stop timer immediately
+    if (questionTimeRef.current) {
+      clearInterval(questionTimeRef.current);
+      questionTimeRef.current = null;
+    }
+
     // Validate all explanations for wrong answers
     let hasErrors = false;
     questions.forEach((q) => {
@@ -639,13 +645,18 @@ const QuizPage = () => {
                   rows={3}
                   placeholder={
                     isExplanationRequired
-                      ? 'Please explain why you chose this answer...'
-                      : 'Optional: Share your thought process...'
+                      ? 'Explain the steps you used to solve and why you did these steps...'
+                      : 'Optional: Explain the steps you used to solve and why you did these steps...'
                   }
                 />
+                {!hasExplanationError && isExplanationRequired && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Please explain the steps you used to solve and why you did these steps.
+                  </p>
+                )}
                 {hasExplanationError && (
                   <p className="mt-1 text-sm text-red-600">
-                    Please explain why you chose this answer
+                    Please explain the steps you used to solve and why you did these steps.
                   </p>
                 )}
               </div>

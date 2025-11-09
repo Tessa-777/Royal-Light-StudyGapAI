@@ -16,6 +16,8 @@ import DashboardPage from './pages/DashboardPage';
 // Layout
 import Header from './components/layout/Header';
 import Footer from './components/layout/Footer';
+import AppRedirect from './components/AppRedirect';
+import ScrollToTop from './components/ScrollToTop';
 import { isAuthenticatedSync } from './services/auth';
 
 // Create React Query client
@@ -72,6 +74,8 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
+        <ScrollToTop />
+        <AppRedirect />
         <div className="flex flex-col min-h-screen bg-gray-50">
           <Header />
           <main className="flex-grow">
@@ -87,14 +91,6 @@ export function App() {
                 element={
                   <ProtectedRoute>
                     <StudyPlanPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/progress"
-                element={
-                  <ProtectedRoute>
-                    <ProgressPage />
                   </ProtectedRoute>
                 }
               />

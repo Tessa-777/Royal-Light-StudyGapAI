@@ -473,6 +473,11 @@ const DiagnosticResultsPage = () => {
                         .split('_')
                         .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
                         .join(' ')
+                    : errorDistribution.length > 0
+                    ? // Fallback: find the error type with highest value
+                      errorDistribution.reduce((prev, current) => 
+                        (prev.value > current.value) ? prev : current
+                      ).name
                     : 'N/A'}
                 </span>
               </div>

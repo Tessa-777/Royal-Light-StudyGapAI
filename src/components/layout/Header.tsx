@@ -11,6 +11,10 @@ const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
+  
+  // Check if user has a study plan (check localStorage for latest quiz/diagnostic)
+  const latestQuizId = localStorage.getItem('latest_quiz_id');
+  const hasStudyPlan = !!latestQuizId && latestQuizId !== 'null' && latestQuizId !== 'undefined';
 
   // Handle scroll event to change header style
   useEffect(() => {
@@ -59,27 +63,31 @@ const Header = () => {
                 <Link to="/dashboard" className="text-gray-700 hover:text-blue-600 font-medium">
                   Dashboard
                 </Link>
-                <Link to="/progress" className="text-gray-700 hover:text-blue-600 font-medium">
-                  Progress
-                </Link>
+                {hasStudyPlan && (
+                  <Link 
+                    to={latestQuizId ? `/study-plan/${latestQuizId}` : '/study-plan/null'} 
+                    className="text-gray-700 hover:text-blue-600 font-medium"
+                  >
+                    Study Plan
+                  </Link>
+                )}
                 <Link to="/resources/all" className="text-gray-700 hover:text-blue-600 font-medium">
                   Resources
                 </Link>
               </>}
           </nav>
           {/* Auth Buttons / User Menu */}
-          <div className="hidden md:flex items-center space-x-4">
-            {isAuthenticated ? <div className="relative">
-                <button className="flex items-center space-x-2 text-gray-700">
-                  <span>{profile?.name || user?.email || 'User'}</span>
-                </button>
-                <button
-                  onClick={handleSignOut}
-                  className="ml-4 text-gray-700 hover:text-blue-600 font-medium"
-                >
-                  Logout
-                </button>
-              </div> : <>
+          <div className="hidden md:flex items-center gap-4">
+            {isAuthenticated ? (
+              // On pages other than home, just show logout (workaround for username display issue)
+              <button
+                onClick={handleSignOut}
+                className="text-gray-700 hover:text-blue-600 font-medium"
+              >
+                Logout
+              </button>
+            ) : (
+              <>
                 <Link to="/login">
                   <Button variant="secondary" size="sm">
                     Login
@@ -90,7 +98,8 @@ const Header = () => {
                     Register
                   </Button>
                 </Link>
-              </>}
+              </>
+            )}
           </div>
           {/* Mobile Menu Button */}
           <button
@@ -124,13 +133,15 @@ const Header = () => {
                   >
                     Dashboard
                   </Link>
-                  <Link
-                    to="/progress"
-                    className="text-gray-700 hover:text-blue-600 py-2 font-medium"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    Progress
-                  </Link>
+                  {hasStudyPlan && (
+                    <Link
+                      to={latestQuizId ? `/study-plan/${latestQuizId}` : '/study-plan/null'}
+                      className="text-gray-700 hover:text-blue-600 py-2 font-medium"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Study Plan
+                    </Link>
+                  )}
                   <Link
                     to="/resources/all"
                     className="text-gray-700 hover:text-blue-600 py-2 font-medium"
@@ -139,6 +150,9 @@ const Header = () => {
                     Resources
                   </Link>
                   <hr className="border-gray-200" />
+                  <div className="text-gray-700 py-2 font-medium text-left">
+                    {profile?.name || user?.email || 'User'}
+                  </div>
                   <button
                     onClick={handleSignOut}
                     className="text-gray-700 hover:text-blue-600 py-2 font-medium text-left"
