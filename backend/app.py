@@ -1,4 +1,5 @@
 import os
+import logging
 from flask import Flask, jsonify
 from dotenv import load_dotenv
 
@@ -14,10 +15,61 @@ from flask_cors import CORS
 # Load environment variables from .env file
 load_dotenv()
 
+# Configure logging to show in terminal/console
+logging.basicConfig(
+	level=logging.INFO,  # Set to INFO to show info, warning, and error logs
+	format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+	datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Get Flask's logger and set level
+flask_logger = logging.getLogger('flask')
+flask_logger.setLevel(logging.INFO)
+
+# Also configure werkzeug (Flask's WSGI server) logger
+werkzeug_logger = logging.getLogger('werkzeug')
+werkzeug_logger.setLevel(logging.INFO)
+
 
 def create_app() -> Flask:
 	app = Flask(__name__)
 	app.config.from_object(AppConfig)
+	
+	# Configure app logger to show logs in terminal
+	# Flask's default logger level might be WARNING, so we set it to INFO
+	# Always show INFO level in development, WARNING in production
+	is_debug = app.config.get("DEBUG", False)
+	
+	# Set logger level based on debug mode
+	app.logger.setLevel(logging.DEBUG if is_debug else logging.INFO)
+	
+	# Remove existing handlers to avoid duplicate logs
+	app.logger.handlers = []
+	
+	# Create console handler
+	console_handler = logging.StreamHandler()
+	console_handler.setLevel(logging.DEBUG if is_debug else logging.INFO)
+	
+	# Create formatter with timestamp and level
+	formatter = logging.Formatter(
+		'%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+		datefmt='%Y-%m-%d %H:%M:%S'
+	)
+	console_handler.setFormatter(formatter)
+	
+	# Add handler to app logger
+	app.logger.addHandler(console_handler)
+	
+	# Also configure root logger to ensure all logs are shown
+	root_logger = logging.getLogger()
+	root_logger.setLevel(logging.DEBUG if is_debug else logging.INFO)
+	if not root_logger.handlers:
+		root_logger.addHandler(console_handler)
+	
+	app.logger.info("=" * 60)
+	app.logger.info("Flask app logger configured - logs will appear in terminal")
+	app.logger.info(f"Debug mode: {is_debug}, Log level: {'DEBUG' if is_debug else 'INFO'}")
+	app.logger.info("=" * 60)
 	
 	# Enhanced CORS configuration
 	# Get CORS origins from environment, default to localhost for development

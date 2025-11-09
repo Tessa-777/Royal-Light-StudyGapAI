@@ -643,12 +643,8 @@ class EnhancedAIService:
 			raise ValueError("Missing 'root_cause_analysis' in AI response")
 		
 		rca = result["root_cause_analysis"]
-		try:
-			rca["primary_weakness"] = validate_error_type(rca.get("primary_weakness", "knowledge_gap"))
-		except ValueError as e:
-			rca["primary_weakness"] = "knowledge_gap"  # Default fallback
 		
-		# Validate error_distribution
+		# Validate error_distribution first
 		error_dist = rca.get("error_distribution", {})
 		validated_dist = {}
 		for error_type in VALID_ERROR_TYPES:
@@ -657,6 +653,31 @@ class EnhancedAIService:
 				count = 0
 			validated_dist[error_type] = count
 		rca["error_distribution"] = validated_dist
+		
+		# Fix primary_weakness to match the highest value in error_distribution
+		# This ensures consistency between the pie chart and the primary weakness display
+		if any(validated_dist.values()):
+			# Find the error type with the highest count
+			primary_weakness = max(validated_dist.items(), key=lambda x: x[1])[0]
+		else:
+			# If all values are 0, default to knowledge_gap
+			primary_weakness = "knowledge_gap"
+		
+		# Validate the calculated primary_weakness
+		try:
+			rca["primary_weakness"] = validate_error_type(primary_weakness)
+		except ValueError:
+			# If validation fails, use knowledge_gap as fallback
+			rca["primary_weakness"] = "knowledge_gap"
+		
+		# Log if AI's primary_weakness didn't match the calculated one (for debugging)
+		ai_primary_weakness = rca.get("primary_weakness")
+		if ai_primary_weakness and ai_primary_weakness != primary_weakness:
+			import logging
+			logging.warning(
+				f"AI returned primary_weakness '{ai_primary_weakness}' but error_distribution shows "
+				f"'{primary_weakness}' as highest. Using calculated value for consistency."
+			)
 		
 		# Fix Issue 3: Validate and correct predicted_jamb_score
 		# This ensures score is 0-400 and confidence_interval is not "N/A"

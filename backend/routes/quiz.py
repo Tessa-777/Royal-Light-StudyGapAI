@@ -24,16 +24,21 @@ def _cache():
 
 @quiz_bp.get("/questions")
 def get_questions():
-	"""Public endpoint - no auth required for questions"""
-	cache = _cache()
-	key = f"questions:{int(request.args.get('total', 30))}"
-	if cache:
-		cached = cache.get(key)
-		if cached:
-			return jsonify(cached), 200
-	questions = _repo().get_diagnostic_questions(total=int(request.args.get("total", 30)))
-	if cache:
-		cache.set(key, questions, timeout=120)
+	"""
+	Public endpoint - no auth required for questions
+	Returns a randomized set of questions ensuring all topics are covered
+	"""
+	total = int(request.args.get("total", 30))
+	subject = request.args.get("subject", "Mathematics")  # Optional subject filter
+	
+	# Don't cache questions - we want different questions each time
+	# Generate questions with topic diversity
+	questions = _repo().get_diagnostic_questions(
+		total=total,
+		subject=subject,
+		ensure_topic_diversity=True
+	)
+	
 	return jsonify(questions), 200
 
 
@@ -80,13 +85,48 @@ def start_quiz(current_user_id):
 		return jsonify(quiz), 201
 	except Exception as e:
 		current_app.logger.error(f"Error creating quiz: {str(e)}", exc_info=True)
-		error_str = str(e)
+		error_str = str(e).lower()
+		
+		# Check for specific error types
 		if "user_id" in error_str and "not present in table" in error_str:
 			return jsonify({
 				"error": "user_not_found", 
 				"message": "User does not exist in database. Please register first."
 			}), 400
-		return jsonify({"error": "server_error", "message": f"Failed to create quiz: {str(e)}"}), 500
+		
+		# Check for connection pool exhaustion (most critical - fail fast)
+		# This happens when too many concurrent requests hit the HTTP/2 stream limit (100 streams)
+		if any(keyword in error_str for keyword in ["max outbound streams", "connection pool exhausted", "pool exhausted", "too many connections", "server is overloaded"]):
+			current_app.logger.error("Connection pool exhausted - too many concurrent requests")
+			return jsonify({
+				"error": "service_overloaded",
+				"message": "Server is experiencing high load. Please wait a few seconds and try again.",
+				"retryable": True,
+				"retry_after": 5  # Suggest retrying after 5 seconds
+			}), 503  # Service Unavailable
+		
+		# Check for ConnectionError (raised by repository for pool exhaustion)
+		if isinstance(e, ConnectionError) and "pool" in error_str:
+			current_app.logger.error("Connection pool error detected")
+			return jsonify({
+				"error": "service_overloaded",
+				"message": "Server is experiencing high load. Please wait a few seconds and try again.",
+				"retryable": True,
+				"retry_after": 5
+			}), 503
+		
+		# Check for network/connection errors
+		if any(keyword in error_str for keyword in ["network", "connection", "ssl", "tls", "eof", "timeout", "writeerror", "localprotocolerror"]):
+			return jsonify({
+				"error": "database_connection_error",
+				"message": "Unable to connect to database. Please try again in a moment.",
+				"retryable": True
+			}), 503  # Service Unavailable
+		
+		return jsonify({
+			"error": "server_error", 
+			"message": f"Failed to create quiz: {str(e)[:200]}"
+		}), 500
 
 
 @quiz_bp.post("/<quiz_id>/submit")
@@ -128,7 +168,14 @@ def submit_quiz(quiz_id: str, current_user_id):
 @quiz_bp.get("/<quiz_id>/results")
 @require_auth
 def quiz_results(quiz_id: str, current_user_id):
-	"""Get quiz results - requires authentication and validates ownership"""
+	"""
+	Get quiz results - requires authentication and validates ownership
+	
+	Returns:
+		- 200: Quiz results if quiz exists and belongs to user
+		- 404: If quiz doesn't exist or doesn't belong to user (not 403 to allow frontend to handle as "not found")
+		- 500: Server error
+	"""
 	repo = _repo()
 	cache = _cache()
 	key = f"quiz_results:{quiz_id}"
@@ -136,14 +183,30 @@ def quiz_results(quiz_id: str, current_user_id):
 		cached = cache.get(key)
 		if cached:
 			# Verify ownership even for cached results
-			if cached.get("quiz", {}).get("user_id") != current_user_id:
-				return jsonify({"error": "forbidden", "message": "Access denied"}), 403
+			quiz_user_id = cached.get("quiz", {}).get("user_id")
+			if quiz_user_id != current_user_id:
+				# Return 404 instead of 403 to indicate "not found" (better UX)
+				# Frontend can handle 404 as "quiz doesn't exist or doesn't belong to you"
+				current_app.logger.info(
+					f"Quiz {quiz_id} access denied: belongs to {quiz_user_id}, requested by {current_user_id}"
+				)
+				return jsonify({"error": "not_found", "message": "Quiz not found"}), 404
 			return jsonify(cached), 200
 	try:
 		results = repo.get_quiz_results(quiz_id)
-		# Verify ownership
-		if not results or results.get("quiz", {}).get("user_id") != current_user_id:
-			return jsonify({"error": "forbidden", "message": "Quiz not found or access denied"}), 403
+		# Verify ownership - return 404 if quiz doesn't exist or doesn't belong to user
+		if not results:
+			current_app.logger.info(f"Quiz {quiz_id} not found in database")
+			return jsonify({"error": "not_found", "message": "Quiz not found"}), 404
+		
+		quiz_user_id = results.get("quiz", {}).get("user_id")
+		if quiz_user_id != current_user_id:
+			# Quiz exists but belongs to different user - return 404 (not 403)
+			# This allows frontend to handle it as "quiz doesn't exist for this user"
+			current_app.logger.info(
+				f"Quiz {quiz_id} access denied: belongs to {quiz_user_id}, requested by {current_user_id}"
+			)
+			return jsonify({"error": "not_found", "message": "Quiz not found"}), 404
 		
 		# Ensure diagnostic has all required fields with proper defaults
 		# This is a safety check - the repository should already handle this

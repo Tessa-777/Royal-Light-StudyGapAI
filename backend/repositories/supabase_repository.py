@@ -1,13 +1,33 @@
+import time
+import logging
 from typing import Any, Dict, List, Optional
 
 from supabase import create_client, Client
+import httpx
+from supabase.client import ClientOptions
 
 from .interface import Repository
+
+logger = logging.getLogger(__name__)
 
 
 class SupabaseRepository(Repository):
 	def __init__(self, url: str, key: str) -> None:
-		self.client: Client = create_client(url, key)
+		# Create Supabase client with timeout configuration
+		# Note: The Supabase Python client uses httpx internally with HTTP/2 enabled by default
+		# HTTP/2 has a max of 100 concurrent streams, which can cause connection pool exhaustion
+		# under heavy load. We handle this by:
+		# 1. Setting reasonable timeouts
+		# 2. Reducing retry attempts and detecting pool errors (in _execute_with_retry)
+		# 3. Failing fast on connection pool exhaustion
+		options = ClientOptions(
+			postgrest_client_timeout=20.0,  # Reduced timeout
+			storage_client_timeout=20.0,
+			schema="public",
+			headers={}
+		)
+		
+		self.client: Client = create_client(url, key, options=options)
 
 	# Users
 	def upsert_user(self, user: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,20 +90,256 @@ class SupabaseRepository(Repository):
 		raise KeyError(f"User {user_id} not found")
 
 	# Questions / Quizzes
-	def get_diagnostic_questions(self, total: int = 30) -> List[Dict[str, Any]]:
+	def get_diagnostic_questions(
+		self, 
+		total: int = 30, 
+		subject: str = "Mathematics",
+		ensure_topic_diversity: bool = True
+	) -> List[Dict[str, Any]]:
+		"""
+		Get diagnostic questions with topic diversity and randomization.
+		
+		Strategy:
+		1. Get all available topics
+		2. Ensure at least 1 question per topic (if possible)
+		3. Fill remaining slots with random questions
+		4. Shuffle final result
+		"""
+		import random
+		
 		try:
-			response = (
+			# Get all questions (filter by subject if questions table has subject field)
+			# For now, we'll get all questions and filter by topic names
+			all_questions_response = (
 				self.client.table("questions")
 				.select("*")
-				.limit(total)
 				.execute()
 			)
-			if response and hasattr(response, 'data'):
-				return response.data
-			return []
-		except Exception:
+			
+			if not all_questions_response or not hasattr(all_questions_response, 'data'):
+				return []
+			
+			all_questions = all_questions_response.data
+			
+			# Filter by subject if needed (check if questions have subject field)
+			# For now, we'll work with all questions since topic is the main filter
+			
+			if not all_questions:
+				return []
+			
+			# If topic diversity is not required, just randomize and return
+			if not ensure_topic_diversity:
+				random.shuffle(all_questions)
+				return all_questions[:total]
+			
+			# Group questions by topic
+			questions_by_topic = {}
+			for q in all_questions:
+				topic = q.get("topic", "Unknown")
+				if topic not in questions_by_topic:
+					questions_by_topic[topic] = []
+				questions_by_topic[topic].append(q)
+			
+			# Get list of all topics
+			topics = list(questions_by_topic.keys())
+			
+			if not topics:
+				# No topics found, return random selection
+				random.shuffle(all_questions)
+				return all_questions[:total]
+			
+			# Strategy: Ensure topic diversity while randomizing questions
+			selected_questions = []
+			selected_ids = set()
+			
+			# Step 1: Ensure at least 1 question from each topic (if we have enough questions)
+			# If we have more topics than total questions, we can't cover all topics
+			# So we'll prioritize covering as many topics as possible
+			if len(topics) <= total:
+				# We have enough slots to include all topics
+				# Shuffle topics to randomize which topics get more questions
+				shuffled_topics = list(topics)
+				random.shuffle(shuffled_topics)
+				
+				# First pass: Ensure 1 question from each topic
+				for topic in shuffled_topics:
+					if len(selected_questions) >= total:
+						break
+					topic_questions = questions_by_topic[topic]
+					if topic_questions:
+						random.shuffle(topic_questions)
+						# Pick a question we haven't selected yet
+						for q in topic_questions:
+							if q.get("id") not in selected_ids:
+								selected_questions.append(q)
+								selected_ids.add(q.get("id"))
+								break
+				
+				# Second pass: Distribute remaining slots across topics
+				remaining_slots = total - len(selected_questions)
+				if remaining_slots > 0:
+					# Calculate how many questions per topic for remaining slots
+					questions_per_topic = max(1, remaining_slots // len(topics))
+					
+					for topic in shuffled_topics:
+						if len(selected_questions) >= total:
+							break
+						topic_questions = questions_by_topic[topic]
+						# Get questions we haven't selected yet
+						available_from_topic = [q for q in topic_questions if q.get("id") not in selected_ids]
+						if available_from_topic:
+							random.shuffle(available_from_topic)
+							num_to_take = min(questions_per_topic, len(available_from_topic), total - len(selected_questions))
+							selected_questions.extend(available_from_topic[:num_to_take])
+							selected_ids.update(q.get("id") for q in available_from_topic[:num_to_take])
+			else:
+				# More topics than total questions - select diverse topics randomly
+				# Shuffle topics and select questions from different topics
+				shuffled_topics = list(topics)
+				random.shuffle(shuffled_topics)
+				
+				for topic in shuffled_topics:
+					if len(selected_questions) >= total:
+						break
+					topic_questions = questions_by_topic[topic]
+					if topic_questions:
+						random.shuffle(topic_questions)
+						# Take 1 question from this topic
+						q = topic_questions[0]
+						if q.get("id") not in selected_ids:
+							selected_questions.append(q)
+							selected_ids.add(q.get("id"))
+			
+			# Step 2: Fill any remaining slots with random questions from all topics
+			if len(selected_questions) < total:
+				remaining_needed = total - len(selected_questions)
+				available_questions = [q for q in all_questions if q.get("id") not in selected_ids]
+				
+				if available_questions:
+					random.shuffle(available_questions)
+					selected_questions.extend(available_questions[:remaining_needed])
+			
+			# Step 4: Shuffle final result to randomize order
+			random.shuffle(selected_questions)
+			
+			# Ensure we don't return more than requested
+			return selected_questions[:total]
+			
+		except Exception as e:
+			import logging
+			logging.error(f"Error getting diagnostic questions: {str(e)}", exc_info=True)
 			return []
 
+	def _is_network_error(self, exception: Exception) -> bool:
+		"""
+		Check if an exception is a network-related error that should be retried.
+		
+		Args:
+			exception: The exception to check
+		
+		Returns:
+			True if the exception is a network error, False otherwise
+		"""
+		# Check exception type
+		if isinstance(exception, (httpx.WriteError, httpx.ReadError, httpx.ConnectError, httpx.TimeoutException)):
+			return True
+		
+		# Check exception name (for wrapped exceptions)
+		error_name = type(exception).__name__.lower()
+		error_str = str(exception).lower()
+		
+		network_keywords = [
+			"writeerror", "readerror", "connecterror", "timeout",
+			"connection", "network", "ssl", "tls", "eof", "protocol",
+			"broken pipe", "connection reset", "connection aborted"
+		]
+		
+		return any(keyword in error_name or keyword in error_str for keyword in network_keywords)
+	
+	def _is_connection_pool_error(self, exception: Exception) -> bool:
+		"""
+		Check if an exception is due to connection pool exhaustion.
+		These errors should NOT be retried immediately as it will make things worse.
+		
+		Args:
+			exception: The exception to check
+		
+		Returns:
+			True if the exception is a connection pool error, False otherwise
+		"""
+		error_str = str(exception).lower()
+		error_name = type(exception).__name__.lower()
+		
+		pool_error_keywords = [
+			"max outbound streams",
+			"localprotocolerror",
+			"connection pool",
+			"too many connections",
+			"pool exhausted"
+		]
+		
+		return any(keyword in error_name or keyword in error_str for keyword in pool_error_keywords)
+	
+	def _execute_with_retry(self, operation, max_retries=2, initial_delay=0.5):
+		"""
+		Execute a Supabase operation with retry logic for network errors.
+		Reduced retries and delays to prevent connection pool exhaustion.
+		
+		Args:
+			operation: Callable that performs the Supabase operation
+			max_retries: Maximum number of retry attempts (reduced to 2)
+			initial_delay: Initial delay in seconds (reduced to 0.5s)
+		
+		Returns:
+			Result of the operation
+		"""
+		last_exception = None
+		
+		for attempt in range(max_retries):
+			try:
+				return operation()
+			except Exception as e:
+				# Check if this is a connection pool error - don't retry these, fail immediately
+				if self._is_connection_pool_error(e):
+					logger.error(
+						f"Connection pool error detected: {type(e).__name__}: {str(e)[:200]}. "
+						"Failing immediately to avoid making the problem worse."
+					)
+					# Raise with a clear message that indicates pool exhaustion
+					raise ConnectionError(
+						"Connection pool exhausted - max outbound streams reached. Server is overloaded."
+					) from e
+				
+				# Check if this is a network error that should be retried
+				if self._is_network_error(e):
+					last_exception = e
+					error_type = type(e).__name__
+					
+					if attempt < max_retries - 1:
+						# Shorter delays to avoid compounding the problem
+						delay = initial_delay * (1.5 ** attempt)  # Reduced exponential backoff
+						logger.warning(
+							f"Network error ({error_type}) on attempt {attempt + 1}/{max_retries}. "
+							f"Retrying in {delay:.2f}s... Error: {str(e)[:200]}"
+						)
+						time.sleep(delay)
+					else:
+						logger.error(
+							f"Network error ({error_type}) after {max_retries} attempts. "
+							f"Error: {str(e)[:200]}"
+						)
+				else:
+					# For non-network errors, don't retry, just re-raise
+					logger.error(f"Non-retryable error: {type(e).__name__}: {str(e)[:200]}")
+					raise
+		
+		# If we exhausted all retries, raise the last exception
+		if last_exception:
+			raise Exception(
+				f"Failed to execute operation after {max_retries} attempts due to network error: "
+				f"{str(last_exception)[:200]}"
+			) from last_exception
+	
 	def create_quiz(self, quiz: Dict[str, Any]) -> Dict[str, Any]:
 		"""
 		Create diagnostic quiz with enhanced schema.
@@ -103,16 +359,18 @@ class SupabaseRepository(Repository):
 		if quiz.get("completed_at"):
 			quiz_payload["completed_at"] = quiz.get("completed_at")
 		
-		try:
+		def _insert_quiz():
 			response = self.client.table("diagnostic_quizzes").insert(quiz_payload).execute()
 			if response.data and len(response.data) > 0:
 				return response.data[0]
 			# Fallback: return quiz dict with generated ID
 			return quiz_payload
+		
+		try:
+			return self._execute_with_retry(_insert_quiz)
 		except Exception as e:
 			# Log error and re-raise with more context
-			import logging
-			logging.error(f"Error creating quiz: {str(e)}, payload: {quiz_payload}")
+			logger.error(f"Error creating quiz: {str(e)}, payload: {quiz_payload}", exc_info=True)
 			raise
 
 	def save_quiz_responses(self, quiz_id: str, responses: List[Dict[str, Any]]) -> None:
@@ -150,7 +408,10 @@ class SupabaseRepository(Repository):
 				transformed["question_id"] = question_id
 			transformed_responses.append(transformed)
 		
-		self.client.table("quiz_responses").insert(transformed_responses).execute()
+		def _insert_responses():
+			self.client.table("quiz_responses").insert(transformed_responses).execute()
+		
+		self._execute_with_retry(_insert_responses)
 
 		# Compute quiz summary
 		res = (
@@ -187,23 +448,38 @@ class SupabaseRepository(Repository):
 		self.client.table("diagnostic_quizzes").update(update_data).eq("id", quiz_id).execute()
 
 	def get_quiz_results(self, quiz_id: str) -> Dict[str, Any]:
-		try:
+		def _get_quiz():
 			quiz_response = self.client.table("diagnostic_quizzes").select("*").eq("id", quiz_id).single().execute()
-			quiz = quiz_response.data if quiz_response and hasattr(quiz_response, 'data') else None
-			
+			return quiz_response.data if quiz_response and hasattr(quiz_response, 'data') else None
+		
+		def _get_responses():
 			responses_response = self.client.table("quiz_responses").select("*").eq("quiz_id", quiz_id).execute()
-			responses = responses_response.data if responses_response and hasattr(responses_response, 'data') else []
-			
+			return responses_response.data if responses_response and hasattr(responses_response, 'data') else []
+		
+		def _get_diagnostic():
+			diagnostic_response = self.client.table("ai_diagnostics").select("*").eq("quiz_id", quiz_id).maybe_single().execute()
+			if diagnostic_response and hasattr(diagnostic_response, 'data') and diagnostic_response.data:
+				return diagnostic_response.data
+			return None
+		
+		try:
+			# Use retry logic for all database queries
+			quiz = self._execute_with_retry(_get_quiz)
 			if not quiz:
 				raise KeyError(f"Quiz {quiz_id} not found")
+			
+			# Get responses and diagnostic (can fail gracefully)
+			try:
+				responses = self._execute_with_retry(_get_responses)
+			except Exception as e:
+				logger.warning(f"Error fetching responses for quiz {quiz_id}: {str(e)}")
+				responses = []
 			
 			# Get diagnostic data if it exists
 			diagnostic = None
 			try:
-				diagnostic_response = self.client.table("ai_diagnostics").select("*").eq("quiz_id", quiz_id).maybe_single().execute()
-				if diagnostic_response and hasattr(diagnostic_response, 'data') and diagnostic_response.data:
-					diagnostic_raw = diagnostic_response.data
-					
+				diagnostic_raw = self._execute_with_retry(_get_diagnostic)
+				if diagnostic_raw:
 					# Format diagnostic to match analyze-diagnostic response format
 					# Handle analysis_result (JSONB field from Supabase)
 					import json
@@ -275,8 +551,7 @@ class SupabaseRepository(Repository):
 						diagnostic["recommendations"] = []
 			except Exception as e:
 				# Log error for debugging
-				import logging
-				logging.error(f"Error fetching diagnostic for quiz {quiz_id}: {str(e)}", exc_info=True)
+				logger.warning(f"Error fetching diagnostic for quiz {quiz_id}: {str(e)}")
 				# Diagnostic doesn't exist or error fetching - that's okay
 				diagnostic = None
 			
@@ -286,6 +561,9 @@ class SupabaseRepository(Repository):
 				"diagnostic": diagnostic  # Include diagnostic data if available
 			}
 		except Exception as e:
+			# Re-raise with more context
+			if isinstance(e, KeyError):
+				raise
 			raise KeyError(f"Quiz {quiz_id} not found") from e
 
 	# AI Diagnostics / Study Plans
@@ -387,6 +665,76 @@ class SupabaseRepository(Repository):
 			return None
 
 	# Progress
+	def get_user_latest_quiz(self, user_id: str) -> Optional[Dict[str, Any]]:
+		"""
+		Get user's latest quiz and diagnostic information.
+		
+		Returns:
+			Dict with keys: quiz_id, diagnostic_id, has_diagnostic, created_at
+			None if user has no quizzes
+		"""
+		def _get_latest_quiz():
+			# Get user's latest quiz (most recent by started_at)
+			# Note: diagnostic_quizzes table has started_at, not created_at
+			# Use started_at to order by most recent quiz
+			quiz_response = (
+				self.client.table("diagnostic_quizzes")
+				.select("id, started_at")
+				.eq("user_id", user_id)
+				.order("started_at", desc=True)
+				.limit(1)
+				.execute()
+			)
+			
+			if not quiz_response or not hasattr(quiz_response, 'data') or not quiz_response.data:
+				return None
+			
+			latest_quiz = quiz_response.data[0]
+			quiz_id = latest_quiz.get("id")
+			started_at = latest_quiz.get("started_at")
+			
+			# Check if this quiz has a diagnostic
+			def _get_diagnostic():
+				diagnostic_response = (
+					self.client.table("ai_diagnostics")
+					.select("id")
+					.eq("quiz_id", quiz_id)
+					.maybe_single()
+					.execute()
+				)
+				
+				diagnostic_id = None
+				has_diagnostic = False
+				if diagnostic_response and hasattr(diagnostic_response, 'data') and diagnostic_response.data:
+					diagnostic_id = diagnostic_response.data.get("id")
+					has_diagnostic = True
+				
+				return {
+					"quiz_id": quiz_id,
+					"diagnostic_id": diagnostic_id,
+					"has_diagnostic": has_diagnostic,
+					"created_at": started_at  # Use started_at as the creation timestamp
+				}
+			
+			# Use retry logic for diagnostic lookup
+			try:
+				return self._execute_with_retry(_get_diagnostic)
+			except Exception as e:
+				# If diagnostic lookup fails, return quiz info without diagnostic
+				logger.warning(f"Error getting diagnostic for quiz {quiz_id}: {str(e)}")
+				return {
+					"quiz_id": quiz_id,
+					"diagnostic_id": None,
+					"has_diagnostic": False,
+					"created_at": started_at
+				}
+		
+		try:
+			return self._execute_with_retry(_get_latest_quiz)
+		except Exception as e:
+			logger.error(f"Error getting latest quiz for user {user_id}: {str(e)}", exc_info=True)
+			return None
+	
 	def get_user_progress(self, user_id: str) -> List[Dict[str, Any]]:
 		try:
 			response = (

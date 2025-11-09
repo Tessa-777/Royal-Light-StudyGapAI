@@ -21,7 +21,23 @@ class Repository:
 		raise NotImplementedError
 
 	# Questions / Quizzes
-	def get_diagnostic_questions(self, total: int = 30) -> List[Dict[str, Any]]:
+	def get_diagnostic_questions(
+		self, 
+		total: int = 30, 
+		subject: str = "Mathematics",
+		ensure_topic_diversity: bool = True
+	) -> List[Dict[str, Any]]:
+		"""
+		Get diagnostic questions for quiz with topic diversity.
+		
+		Args:
+			total: Total number of questions to return
+			subject: Subject to filter questions (optional)
+			ensure_topic_diversity: If True, ensure all topics are represented
+			
+		Returns:
+			List of question dictionaries, randomized and topic-diverse
+		"""
 		raise NotImplementedError
 
 	def create_quiz(self, quiz: Dict[str, Any]) -> Dict[str, Any]:
@@ -55,6 +71,17 @@ class Repository:
 
 	# Analytics
 	def get_analytics_dashboard(self) -> Dict[str, Any]:
+		raise NotImplementedError
+
+	# User Latest Quiz/Diagnostic
+	def get_user_latest_quiz(self, user_id: str) -> Optional[Dict[str, Any]]:
+		"""
+		Get user's latest quiz and diagnostic information.
+		
+		Returns:
+			Dict with keys: quiz_id, diagnostic_id, has_diagnostic, created_at
+			None if user has no quizzes
+		"""
 		raise NotImplementedError
 
 	# Topics

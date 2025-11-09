@@ -92,12 +92,17 @@ class InMemoryRepository(Repository):
 			self.resources[rid] = {"id": rid, **resource}
 
 		# Seed a minimal question bank per schema for local testing
+		# Create questions with diverse topics to test topic distribution
+		sample_topics = ["Algebra", "Geometry", "Trigonometry", "Calculus", "Statistics", "Number Theory"]
 		for i in range(50):
 			qid = _uuid()
+			# Distribute questions across topics
+			topic = sample_topics[i % len(sample_topics)]
 			self.questions[qid] = {
 				"id": qid,
 				"topic_id": _uuid(),
-				"question_text": f"What is {i}+{i}?",
+				"topic": topic,  # Add topic field for topic diversity logic
+				"question_text": f"{topic} Question {i+1}: What is {i}+{i}?",
 				"option_a": "1",
 				"option_b": "2",
 				"option_c": str(i + i),
@@ -140,9 +145,119 @@ class InMemoryRepository(Repository):
 		return user
 
 	# Questions / Quizzes
-	def get_diagnostic_questions(self, total: int = 30) -> List[Dict[str, Any]]:
+	def get_diagnostic_questions(
+		self, 
+		total: int = 30, 
+		subject: str = "Mathematics",
+		ensure_topic_diversity: bool = True
+	) -> List[Dict[str, Any]]:
+		"""
+		Get diagnostic questions with topic diversity and randomization.
+		"""
+		import random
+		
 		all_q = list(self.questions.values())
-		return all_q[: total if total <= len(all_q) else len(all_q)]
+		
+		if not all_q:
+			return []
+		
+		# If topic diversity is not required, just randomize and return
+		if not ensure_topic_diversity:
+			random.shuffle(all_q)
+			return all_q[:total]
+		
+		# Group questions by topic
+		questions_by_topic = {}
+		for q in all_q:
+			topic = q.get("topic", "Unknown")
+			if topic not in questions_by_topic:
+				questions_by_topic[topic] = []
+			questions_by_topic[topic].append(q)
+		
+		# Get list of all topics
+		topics = list(questions_by_topic.keys())
+		
+		if not topics:
+			# No topics found, return random selection
+			random.shuffle(all_q)
+			return all_q[:total]
+		
+		# Strategy: Ensure topic diversity while randomizing questions
+		selected_questions = []
+		selected_ids = set()
+		
+		# Step 1: Ensure at least 1 question from each topic (if we have enough questions)
+		# If we have more topics than total questions, we can't cover all topics
+		# So we'll prioritize covering as many topics as possible
+		if len(topics) <= total:
+			# We have enough slots to include all topics
+			# Shuffle topics to randomize which topics get more questions
+			shuffled_topics = list(topics)
+			random.shuffle(shuffled_topics)
+			
+			# First pass: Ensure 1 question from each topic
+			for topic in shuffled_topics:
+				if len(selected_questions) >= total:
+					break
+				topic_questions = questions_by_topic[topic]
+				if topic_questions:
+					random.shuffle(topic_questions)
+					# Pick a question we haven't selected yet
+					for q in topic_questions:
+						if q.get("id") not in selected_ids:
+							selected_questions.append(q)
+							selected_ids.add(q.get("id"))
+							break
+			
+			# Second pass: Distribute remaining slots across topics
+			remaining_slots = total - len(selected_questions)
+			if remaining_slots > 0:
+				# Calculate how many questions per topic for remaining slots
+				questions_per_topic = max(1, remaining_slots // len(topics))
+				
+				for topic in shuffled_topics:
+					if len(selected_questions) >= total:
+						break
+					topic_questions = questions_by_topic[topic]
+					# Get questions we haven't selected yet
+					available_from_topic = [q for q in topic_questions if q.get("id") not in selected_ids]
+					if available_from_topic:
+						random.shuffle(available_from_topic)
+						num_to_take = min(questions_per_topic, len(available_from_topic), total - len(selected_questions))
+						selected_questions.extend(available_from_topic[:num_to_take])
+						selected_ids.update(q.get("id") for q in available_from_topic[:num_to_take])
+		else:
+			# More topics than total questions - select diverse topics randomly
+			# Shuffle topics and select questions from different topics
+			shuffled_topics = list(topics)
+			random.shuffle(shuffled_topics)
+			
+			for topic in shuffled_topics:
+				if len(selected_questions) >= total:
+					break
+				topic_questions = questions_by_topic[topic]
+				if topic_questions:
+					random.shuffle(topic_questions)
+					# Take 1 question from this topic
+					q = topic_questions[0]
+					if q.get("id") not in selected_ids:
+						selected_questions.append(q)
+						selected_ids.add(q.get("id"))
+		
+		# Step 2: Fill any remaining slots with random questions from all topics
+		if len(selected_questions) < total:
+			remaining_needed = total - len(selected_questions)
+			available_questions = [q for q in all_q if q.get("id") not in selected_ids]
+			
+			if available_questions:
+				random.shuffle(available_questions)
+				selected_questions.extend(available_questions[:remaining_needed])
+		
+		# Step 4: Shuffle final result to randomize order
+		random.shuffle(selected_questions)
+		
+		# Ensure we don't return more than requested
+		return selected_questions[:total]
 
 	def create_quiz(self, quiz: Dict[str, Any]) -> Dict[str, Any]:
 		quiz_id = _uuid()
@@ -309,6 +424,53 @@ class InMemoryRepository(Repository):
 		self.study_plans[plan_id]["plan_data"] = plan_data
 		self.study_plans[plan_id]["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 		return self.study_plans[plan_id]
+
+	# User Latest Quiz/Diagnostic
+	def get_user_latest_quiz(self, user_id: str) -> Optional[Dict[str, Any]]:
+		"""
+		Get user's latest quiz and diagnostic information.
+		
+		Returns:
+			Dict with keys: quiz_id, diagnostic_id, has_diagnostic, created_at
+			None if user has no quizzes
+		"""
+		# Get all quizzes for this user, sorted by created_at (most recent first)
+		user_quizzes = [
+			q for q in self.quizzes.values()
+			if q.get("user_id") == user_id
+		]
+		
+		if not user_quizzes:
+			return None
+		
+		# Sort by started_at (most recent first)
+		# Use started_at if available, otherwise fall back to created_at or empty string
+		user_quizzes.sort(
+			key=lambda x: x.get("started_at") or x.get("created_at", ""),
+			reverse=True
+		)
+		
+		latest_quiz = user_quizzes[0]
+		quiz_id = latest_quiz.get("id")
+		
+		# Check if this quiz has a diagnostic
+		diagnostic_id = None
+		has_diagnostic = False
+		for diag in self.ai_diagnostics.values():
+			if diag.get("quiz_id") == quiz_id:
+				diagnostic_id = diag.get("id")
+				has_diagnostic = True
+				break
+		
+		# Use started_at as the creation timestamp (diagnostic_quizzes table uses started_at, not created_at)
+		created_at = latest_quiz.get("started_at") or latest_quiz.get("created_at")
+		
+		return {
+			"quiz_id": quiz_id,
+			"diagnostic_id": diagnostic_id,
+			"has_diagnostic": has_diagnostic,
+			"created_at": created_at
+		}
 
 	# Progress
 	def get_user_progress(self, user_id: str) -> List[Dict[str, Any]]:

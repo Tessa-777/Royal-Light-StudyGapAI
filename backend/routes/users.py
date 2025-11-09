@@ -78,17 +78,137 @@ def login(current_user_id=None):
 @users_bp.get("/me")
 @require_auth
 def get_current_user(current_user_id):
-	"""Get current authenticated user's profile"""
-	user = _repo().get_user(current_user_id)
+	"""
+	Get current authenticated user's profile with latest quiz/diagnostic info
+	
+	Includes:
+	- User profile data
+	- latest_quiz_id: ID of user's most recent quiz (if exists)
+	- latest_diagnostic_id: ID of user's most recent diagnostic (if exists)
+	- has_diagnostic: Boolean indicating if user has any diagnostics
+	"""
+	repo = _repo()
+	user = repo.get_user(current_user_id)
 	if not user:
 		# User authenticated via JWT but doesn't exist in users table yet
 		# Auto-create a basic user record
-		user = _repo().upsert_user({
+		user = repo.upsert_user({
 			"id": current_user_id,
 			"email": f"user_{current_user_id[:8]}@example.com",  # Placeholder email
 			"name": "Student"
 		})
+	
+	# Get user's latest quiz and diagnostic
+	try:
+		current_app.logger.info(f"Getting latest quiz for user {current_user_id}")
+		latest_quiz = repo.get_user_latest_quiz(current_user_id)
+		if latest_quiz:
+			quiz_id = latest_quiz.get("quiz_id")
+			diagnostic_id = latest_quiz.get("diagnostic_id")
+			has_diagnostic = latest_quiz.get("has_diagnostic", False)
+			current_app.logger.info(f"User {current_user_id} latest quiz: quiz_id={quiz_id}, diagnostic_id={diagnostic_id}, has_diagnostic={has_diagnostic}")
+			user["latest_quiz_id"] = quiz_id
+			user["latest_diagnostic_id"] = diagnostic_id
+			user["has_diagnostic"] = has_diagnostic
+		else:
+			current_app.logger.info(f"User {current_user_id} has no quizzes")
+			user["latest_quiz_id"] = None
+			user["latest_diagnostic_id"] = None
+			user["has_diagnostic"] = False
+	except Exception as e:
+		# If there's an error getting latest quiz, just set defaults
+		current_app.logger.error(f"Error getting latest quiz for user {current_user_id}: {str(e)}", exc_info=True)
+		user["latest_quiz_id"] = None
+		user["latest_diagnostic_id"] = None
+		user["has_diagnostic"] = False
+	
 	return jsonify(user), 200
+
+
+@users_bp.get("/me/diagnostics/latest")
+@require_auth
+def get_latest_diagnostic(current_user_id):
+	"""
+	Get user's latest diagnostic results.
+	
+	Returns the complete diagnostic data including:
+	- Overall performance
+	- Topic breakdown
+	- Root cause analysis
+	- Predicted JAMB score
+	- Study plan
+	- Recommendations
+	"""
+	repo = _repo()
+	
+	# Get user's latest quiz and diagnostic
+	try:
+		latest_quiz_info = repo.get_user_latest_quiz(current_user_id)
+		if not latest_quiz_info or not latest_quiz_info.get("has_diagnostic"):
+			return jsonify({
+				"error": "not_found",
+				"message": "No diagnostic found for this user"
+			}), 404
+		
+		quiz_id = latest_quiz_info.get("quiz_id")
+		if not quiz_id:
+			return jsonify({
+				"error": "not_found",
+				"message": "No quiz found for this user"
+			}), 404
+		
+		# Get quiz results (includes diagnostic)
+		results = repo.get_quiz_results(quiz_id)
+		if not results:
+			return jsonify({
+				"error": "not_found",
+				"message": "Quiz results not found"
+			}), 404
+		
+		# Verify ownership
+		quiz_user_id = results.get("quiz", {}).get("user_id")
+		if quiz_user_id != current_user_id:
+			return jsonify({
+				"error": "forbidden",
+				"message": "Access denied"
+			}), 403
+		
+		# Return diagnostic data
+		diagnostic = results.get("diagnostic")
+		if not diagnostic:
+			return jsonify({
+				"error": "not_found",
+				"message": "Diagnostic not found for this quiz"
+			}), 404
+		
+		# Ensure all required fields exist
+		if "overall_performance" not in diagnostic or diagnostic.get("overall_performance") is None:
+			diagnostic["overall_performance"] = {}
+		if "topic_breakdown" not in diagnostic or diagnostic.get("topic_breakdown") is None:
+			diagnostic["topic_breakdown"] = []
+		if "root_cause_analysis" not in diagnostic or diagnostic.get("root_cause_analysis") is None:
+			diagnostic["root_cause_analysis"] = {}
+		if "predicted_jamb_score" not in diagnostic or diagnostic.get("predicted_jamb_score") is None:
+			diagnostic["predicted_jamb_score"] = {}
+		if "study_plan" not in diagnostic or diagnostic.get("study_plan") is None:
+			diagnostic["study_plan"] = {}
+		if "recommendations" not in diagnostic or diagnostic.get("recommendations") is None:
+			diagnostic["recommendations"] = []
+		
+		# Add quiz_id to response for frontend convenience
+		response_data = {
+			**diagnostic,
+			"quiz_id": quiz_id,
+			"diagnostic_id": latest_quiz_info.get("diagnostic_id")
+		}
+		
+		return jsonify(response_data), 200
+	except Exception as e:
+		current_app.logger.error(f"Error getting latest diagnostic for user {current_user_id}: {str(e)}", exc_info=True)
+		return jsonify({
+			"error": "server_error",
+			"message": f"Failed to get diagnostic: {str(e)}"
+		}), 500
 
 
 @users_bp.get("/<user_id>")

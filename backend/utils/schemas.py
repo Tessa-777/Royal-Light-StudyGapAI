@@ -156,8 +156,9 @@ class SaveDiagnosticRequest(BaseModel):
 	questions_list: List[QuestionResponse] = Field(min_length=1, description="List of question responses")
 	
 	# Diagnostic data (from the guest diagnostic response)
+	# Optional - if not provided, will be regenerated from quiz data
 	# Using Dict[str, Any] instead of AnalyzeDiagnosticResponse to be more flexible
 	# The diagnostic might have additional fields or slightly different structure
-	diagnostic: Dict[str, Any] = Field(description="Complete diagnostic result from guest submission")
+	diagnostic: Optional[Dict[str, Any]] = Field(default=None, description="Complete diagnostic result from guest submission (optional - will be regenerated if not provided)")
 
 

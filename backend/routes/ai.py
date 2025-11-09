@@ -67,10 +67,20 @@ def analyze_diagnostic(current_user_id=None):
 	
 	# Determine if user is authenticated (guest mode)
 	is_guest = current_user_id is None
+	
+	# Log authentication status and request details
+	auth_header = request.headers.get("Authorization", "")
+	has_auth_header = bool(auth_header)
+	current_app.logger.info(f"📋 Quiz submission received: is_guest={is_guest}, has_auth_header={has_auth_header}, current_user_id={current_user_id}")
+	
 	if is_guest:
 		current_app.logger.info("👤 Guest user submitting quiz (no authentication)")
+		if has_auth_header:
+			current_app.logger.warning("⚠️ Guest user but Authorization header present - token might be invalid or expired")
 	else:
 		current_app.logger.info(f"👤 Authenticated user submitting quiz: {current_user_id}")
+		if not has_auth_header:
+			current_app.logger.warning("⚠️ Authenticated user but no Authorization header - this shouldn't happen")
 	
 	# Validate required fields
 	ok, missing = require_fields(data, ["subject", "total_questions", "time_taken", "questions_list"])
@@ -207,6 +217,7 @@ def analyze_diagnostic(current_user_id=None):
 		if not quiz_id:
 			# Create new quiz for authenticated user
 			try:
+				current_app.logger.info(f"Creating quiz for user {current_user_id}: subject={data.get('subject')}, total_questions={data.get('total_questions')}, time_taken={data.get('time_taken')}")
 				quiz = _repo().create_quiz({
 					"user_id": current_user_id,
 					"subject": data["subject"],
@@ -216,14 +227,15 @@ def analyze_diagnostic(current_user_id=None):
 				})
 				quiz_id = quiz.get("id")
 				if not quiz_id:
-					current_app.logger.error(f"Quiz created but no ID returned: {quiz}")
+					current_app.logger.error(f"❌ Quiz created but no ID returned. Quiz data: {quiz}")
 					return jsonify({"error": "internal_error", "message": "Failed to create quiz - no ID returned"}), 500
-				current_app.logger.info(f"Created quiz for authenticated user: {quiz_id}")
+				current_app.logger.info(f"✅ Created quiz for authenticated user: {quiz_id} (user_id: {current_user_id})")
 			except Exception as e:
-				current_app.logger.error(f"Error creating quiz: {str(e)}", exc_info=True)
+				current_app.logger.error(f"❌ Error creating quiz for user {current_user_id}: {str(e)}", exc_info=True)
 				# Check if it's a foreign key error for user_id
-				error_str = str(e)
-				if "user_id" in error_str and "not present in table" in error_str:
+				error_str = str(e).lower()
+				if "user_id" in error_str and ("not present in table" in error_str or "foreign key" in error_str):
+					current_app.logger.error(f"❌ User {current_user_id} does not exist in database")
 					return jsonify({
 						"error": "user_not_found", 
 						"message": "User does not exist in database. Please ensure user is registered in the users table."
@@ -245,14 +257,16 @@ def analyze_diagnostic(current_user_id=None):
 				}
 				for idx, q in enumerate(questions_with_confidence)
 			]
+			current_app.logger.info(f"Saving {len(responses)} quiz responses for quiz {quiz_id}")
 			_repo().save_quiz_responses(quiz_id, responses)
-			current_app.logger.info(f"Saved quiz responses for authenticated user: {quiz_id}")
+			current_app.logger.info(f"✅ Saved {len(responses)} quiz responses for quiz {quiz_id}")
 		except Exception as e:
-			current_app.logger.error(f"Error saving quiz responses: {str(e)}", exc_info=True)
+			current_app.logger.error(f"❌ Error saving quiz responses for quiz {quiz_id}: {str(e)}", exc_info=True)
 			return jsonify({"error": "internal_error", "message": f"Failed to save quiz responses: {str(e)}"}), 500
 		
 		# Save diagnostic to database for authenticated users
 		try:
+			current_app.logger.info(f"Saving diagnostic for quiz {quiz_id} (user: {current_user_id})")
 			diagnostic = _repo().save_ai_diagnostic({
 				"quiz_id": quiz_id,
 				"analysis_result": analysis,  # Store complete analysis
@@ -263,9 +277,13 @@ def analyze_diagnostic(current_user_id=None):
 				"study_plan": analysis.get("study_plan"),  # Study plan included (Decision 4: Option A)
 				"recommendations": analysis.get("recommendations"),
 			})
-			current_app.logger.info(f"Saved diagnostic to database for authenticated user: {diagnostic.get('id')}")
+			diagnostic_id = diagnostic.get("id")
+			if not diagnostic_id:
+				current_app.logger.error(f"❌ Diagnostic saved but no ID returned. Diagnostic data: {diagnostic}")
+				return jsonify({"error": "internal_error", "message": "Failed to save diagnostic - no ID returned"}), 500
+			current_app.logger.info(f"✅ Saved diagnostic to database: {diagnostic_id} (quiz_id: {quiz_id}, user: {current_user_id})")
 		except Exception as e:
-			current_app.logger.error(f"Error saving diagnostic: {str(e)}", exc_info=True)
+			current_app.logger.error(f"❌ Error saving diagnostic for quiz {quiz_id}: {str(e)}", exc_info=True)
 			return jsonify({"error": "internal_error", "message": f"Failed to save diagnostic: {str(e)}"}), 500
 	else:
 		# Guest user: Don't save to database, just generate diagnostic
@@ -285,11 +303,17 @@ def analyze_diagnostic(current_user_id=None):
 		"generated_at": diagnostic.get("generated_at", datetime.now(timezone.utc).isoformat())
 	}
 	
-	# Log response
+	# Log response with detailed information
 	if is_guest:
 		current_app.logger.info(f"✅ Guest diagnostic generated: {response_data.get('id')} (not saved to database)")
+		current_app.logger.info(f"📤 Returning guest diagnostic response (quiz_id: None)")
 	else:
-		current_app.logger.info(f"✅ Authenticated diagnostic generated and saved: {response_data.get('id')} (quiz_id: {quiz_id})")
+		diagnostic_id = response_data.get("id")
+		current_app.logger.info(f"✅✅✅ SUCCESS: Authenticated diagnostic generated and saved ✅✅✅")
+		current_app.logger.info(f"   - Diagnostic ID: {diagnostic_id}")
+		current_app.logger.info(f"   - Quiz ID: {quiz_id}")
+		current_app.logger.info(f"   - User ID: {current_user_id}")
+		current_app.logger.info(f"📤 Returning authenticated diagnostic response (quiz_id: {quiz_id}, diagnostic_id: {diagnostic_id})")
 	
 	return jsonify(response_data), 200
 
@@ -311,16 +335,26 @@ def save_diagnostic(current_user_id):
 	
 	Flow:
 	1. Guest user takes quiz -> gets diagnostic (stored in localStorage)
-	2. Guest user signs up
-	3. Guest user calls this endpoint to save their diagnostic
+	2. Guest user signs up/logs in
+	3. Frontend calls this endpoint to save their diagnostic
 	4. Backend creates quiz, saves responses, and saves diagnostic
-	5. Returns quiz_id for frontend to update localStorage
+	5. Returns quiz_id and diagnostic_id for frontend to update localStorage
 	"""
 	data = request.get_json(force=True) or {}
 	
-	# Validate required fields
-	ok, missing = require_fields(data, ["subject", "total_questions", "time_taken", "questions_list", "diagnostic"])
+	current_app.logger.info("=" * 60)
+	current_app.logger.info(f"💾 SAVE-DIAGNOSTIC REQUEST RECEIVED")
+	current_app.logger.info(f"   - User ID: {current_user_id}")
+	current_app.logger.info(f"   - Has diagnostic data: {bool(data.get('diagnostic'))}")
+	current_app.logger.info(f"   - Has questions_list: {bool(data.get('questions_list'))}")
+	current_app.logger.info(f"   - Subject: {data.get('subject')}")
+	current_app.logger.info(f"   - Total questions: {data.get('total_questions')}")
+	current_app.logger.info("=" * 60)
+	
+	# Validate required fields (diagnostic is optional - will be regenerated if not provided)
+	ok, missing = require_fields(data, ["subject", "total_questions", "time_taken", "questions_list"])
 	if not ok:
+		current_app.logger.error(f"❌ Missing required fields: {missing}")
 		return jsonify({"error": "missing_fields", "fields": missing}), 400
 	
 	# Ensure user exists in users table (auto-create if needed)
@@ -369,6 +403,7 @@ def save_diagnostic(current_user_id):
 	
 	# Create quiz
 	try:
+		current_app.logger.info(f"Creating quiz for user {current_user_id} from guest diagnostic...")
 		quiz = _repo().create_quiz({
 			"user_id": current_user_id,
 			"subject": data["subject"],
@@ -378,11 +413,11 @@ def save_diagnostic(current_user_id):
 		})
 		quiz_id = quiz.get("id")
 		if not quiz_id:
-			current_app.logger.error(f"Quiz created but no ID returned: {quiz}")
+			current_app.logger.error(f"❌ Quiz created but no ID returned: {quiz}")
 			return jsonify({"error": "internal_error", "message": "Failed to create quiz - no ID returned"}), 500
-		current_app.logger.info(f"Created quiz for user: {quiz_id}")
+		current_app.logger.info(f"✅ Created quiz from guest diagnostic: {quiz_id} (user: {current_user_id})")
 	except Exception as e:
-		current_app.logger.error(f"Error creating quiz: {str(e)}", exc_info=True)
+		current_app.logger.error(f"❌ Error creating quiz from guest diagnostic: {str(e)}", exc_info=True)
 		error_str = str(e)
 		if "user_id" in error_str and "not present in table" in error_str:
 			return jsonify({
@@ -409,17 +444,60 @@ def save_diagnostic(current_user_id):
 	
 	# Save quiz responses
 	try:
+		current_app.logger.info(f"Saving {len(responses)} quiz responses for quiz {quiz_id}...")
 		_repo().save_quiz_responses(quiz_id, responses)
-		current_app.logger.info(f"Saved quiz responses for quiz: {quiz_id}")
+		current_app.logger.info(f"✅ Saved {len(responses)} quiz responses for quiz {quiz_id}")
 	except Exception as e:
-		current_app.logger.error(f"Error saving quiz responses: {str(e)}", exc_info=True)
+		current_app.logger.error(f"❌ Error saving quiz responses: {str(e)}", exc_info=True)
 		return jsonify({"error": "internal_error", "message": f"Failed to save quiz responses: {str(e)}"}), 500
 	
-	# Extract diagnostic data
-	diagnostic_data = data["diagnostic"]
+	# Extract diagnostic data - if not provided, regenerate it from quiz data
+	diagnostic_data = data.get("diagnostic")
+	diagnostic_regenerated = False
+	
+	if not diagnostic_data:
+		# Diagnostic not provided - regenerate it from quiz data using AI service
+		current_app.logger.info(f"⚠️ Diagnostic not provided in request, regenerating from quiz data for quiz: {quiz_id}")
+		current_app.logger.info(f"   This will take longer but ensures diagnostic is saved correctly")
+		diagnostic_regenerated = True
+		try:
+			# Use the analyze-diagnostic logic to generate diagnostic
+			from ..services.ai_enhanced import EnhancedAIService
+			cfg = current_app.config
+			ai_service = EnhancedAIService(
+				api_key=cfg.get("GOOGLE_API_KEY"),
+				model_name=cfg.get("AI_MODEL_NAME", "gemini-1.5-flash"),
+				mock=cfg.get("AI_MOCK", True)
+			)
+			
+			# Prepare quiz data for analysis
+			quiz_data = {
+				"subject": data["subject"],
+				"total_questions": data["total_questions"],
+				"time_taken": data["time_taken"],
+				"questions_list": questions_list
+			}
+			
+			# Generate diagnostic
+			current_app.logger.info(f"Calling AI service to regenerate diagnostic...")
+			diagnostic_result = ai_service.analyze_diagnostic(quiz_data)
+			
+			if not diagnostic_result:
+				current_app.logger.error("❌ Failed to generate diagnostic from quiz data")
+				return jsonify({"error": "internal_error", "message": "Failed to generate diagnostic"}), 500
+			
+			diagnostic_data = diagnostic_result
+			current_app.logger.info(f"✅ Successfully regenerated diagnostic for quiz: {quiz_id}")
+		except Exception as e:
+			current_app.logger.error(f"❌ Error regenerating diagnostic: {str(e)}", exc_info=True)
+			return jsonify({"error": "internal_error", "message": f"Failed to generate diagnostic: {str(e)}"}), 500
+	else:
+		current_app.logger.info(f"✅ Using provided diagnostic data from guest quiz for quiz: {quiz_id}")
+		current_app.logger.info(f"   Diagnostic ID in data: {diagnostic_data.get('id') if isinstance(diagnostic_data, dict) else 'N/A'}")
 	
 	# Save diagnostic to database
 	try:
+		current_app.logger.info(f"Saving diagnostic to database for quiz {quiz_id}...")
 		diagnostic = _repo().save_ai_diagnostic({
 			"quiz_id": quiz_id,
 			"analysis_result": diagnostic_data,  # Store complete diagnostic as analysis_result
@@ -430,16 +508,26 @@ def save_diagnostic(current_user_id):
 			"study_plan": diagnostic_data.get("study_plan"),
 			"recommendations": diagnostic_data.get("recommendations"),
 		})
-		current_app.logger.info(f"Saved diagnostic to database: {diagnostic.get('id')} (quiz_id: {quiz_id})")
+		diagnostic_id = diagnostic.get("id")
+		if not diagnostic_id:
+			current_app.logger.error(f"❌ Diagnostic saved but no ID returned: {diagnostic}")
+			return jsonify({"error": "internal_error", "message": "Failed to save diagnostic - no ID returned"}), 500
+		current_app.logger.info(f"✅✅✅ GUEST DIAGNOSTIC SAVED SUCCESSFULLY ✅✅✅")
+		current_app.logger.info(f"   - Diagnostic ID: {diagnostic_id}")
+		current_app.logger.info(f"   - Quiz ID: {quiz_id}")
+		current_app.logger.info(f"   - User ID: {current_user_id}")
+		current_app.logger.info(f"   - Diagnostic regenerated: {diagnostic_regenerated}")
+		current_app.logger.info("=" * 60)
 	except Exception as e:
-		current_app.logger.error(f"Error saving diagnostic: {str(e)}", exc_info=True)
+		current_app.logger.error(f"❌ Error saving diagnostic: {str(e)}", exc_info=True)
 		return jsonify({"error": "internal_error", "message": f"Failed to save diagnostic: {str(e)}"}), 500
 	
 	# Return quiz_id for frontend to update localStorage
 	return jsonify({
 		"quiz_id": quiz_id,
-		"diagnostic_id": diagnostic.get("id"),
-		"message": "Diagnostic saved successfully"
+		"diagnostic_id": diagnostic_id,
+		"message": "Diagnostic saved successfully",
+		"diagnostic_regenerated": diagnostic_regenerated  # Indicate if diagnostic was regenerated
 	}), 200
 
 

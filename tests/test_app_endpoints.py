@@ -49,7 +49,7 @@ def test_user_register_and_login():
 def test_questions_endpoint():
 	"""Test questions endpoint (no auth required)"""
 	client = make_client()
-	q = client.get("/api/questions?total=5")
+	q = client.get("/api/quiz/questions?total=5")
 	assert q.status_code == 200
 	questions = q.get_json()
 	assert isinstance(questions, list)

@@ -2,8 +2,10 @@ import os
 
 
 class AppConfig:
-	ENV = os.getenv("FLASK_ENV", "production")
-	DEBUG = ENV != "production"
+	# Set ENV to 'development' by default for local development
+	# This ensures DEBUG=True and logs are visible
+	ENV = os.getenv("FLASK_ENV", "development")
+	DEBUG = ENV != "production"  # DEBUG=True when ENV != "production"
 	TESTING = os.getenv("TESTING", "false").lower() == "true"
 	SECRET_KEY = os.getenv("SECRET_KEY", "insecure-dev-secret")
 
