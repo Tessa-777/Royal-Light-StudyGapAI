@@ -136,6 +136,8 @@ All project documentation is organized in the [`docs/`](./docs/) folder:
 - **[Project Summary](./docs/PROJECT_SUMMARY.md)** - Complete project overview and current state
 - **[Implementation Summary](./docs/IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
 - **[Quick Start Guide](./docs/QUICK_START.md)** - Developer quick start
+- **[Deployment Guide](./docs/DEPLOYMENT_GUIDE.md)** - Deploy to Vercel (frontend) and Render (backend)
+- **[Vercel Deployment Guide](./docs/VERCEL_DEPLOYMENT_GUIDE.md)** - Complete Vercel deployment guide
 - **[Troubleshooting Guide](./docs/TROUBLESHOOTING_GUIDE.md)** - Common issues and solutions
 
 ### Frontend-Specific Docs
