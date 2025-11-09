@@ -68,3 +68,9 @@ test_response.json
 *.log
 deploy_logs_*.txt
 
+# Test files should be in tests/ directory
+# All test files in root are now moved to tests/
+
+# Utility scripts are in scripts/ directory
+# These are development tools, not part of the main application
+
