@@ -6,7 +6,20 @@
 
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
+// Get API base URL from environment variable
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+
+// Log the API base URL in development to help debug
+if (import.meta.env.DEV) {
+  console.log('[API] VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+  console.log('[API] Using API_BASE_URL:', API_BASE_URL);
+}
+
+// In production, log a warning if using localhost fallback
+if (import.meta.env.PROD && API_BASE_URL.includes('localhost')) {
+  console.error('[API] WARNING: Using localhost fallback in production!');
+  console.error('[API] VITE_API_BASE_URL is not set. Please set it in Vercel environment variables.');
+}
 
 // Retry configuration
 const MAX_RETRIES = 3;

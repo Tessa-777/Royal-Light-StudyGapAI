@@ -3,7 +3,21 @@
  * Centralized endpoint definitions for the StudyGapAI backend API
  */
 
+// Get API base URL from environment variable
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+
+// Log in development to help debug
+if (import.meta.env.DEV) {
+  console.log('[ENDPOINTS] VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+  console.log('[ENDPOINTS] Using API_BASE_URL:', API_BASE_URL);
+}
+
+// Warn in production if using localhost fallback
+if (import.meta.env.PROD && API_BASE_URL.includes('localhost')) {
+  console.error('[ENDPOINTS] ⚠️ WARNING: Using localhost fallback in production!');
+  console.error('[ENDPOINTS] VITE_API_BASE_URL is not set in Vercel environment variables.');
+  console.error('[ENDPOINTS] Please set VITE_API_BASE_URL in Vercel dashboard and redeploy.');
+}
 
 export const endpoints = {
   // User Management
