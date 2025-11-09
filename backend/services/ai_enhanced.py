@@ -17,6 +17,8 @@ from .confidence_inference import add_confidence_scores
 from ..utils.calculations import (
 	validate_and_correct_fluency_index,
 	validate_and_correct_jamb_score,
+	validate_and_correct_overall_performance,
+	ensure_all_topics_in_breakdown,
 	validate_topic_status,
 	validate_error_type,
 	calculate_jamb_base_score
@@ -46,10 +48,31 @@ class EnhancedAIService:
 			model_name: Model name (e.g., 'gemini-2.0-flash')
 			mock: Whether to use mock mode
 		"""
-		self.mock = mock or not api_key
+		# IMPORTANT: Only use mock if explicitly requested OR if API key is missing
+		# If mock=False and api_key exists, use real AI
+		if mock:
+			self.mock = True
+		elif not api_key:
+			self.mock = True
+			# Log warning if API key is missing
+			try:
+				if current_app:
+					current_app.logger.warning("⚠️ API key is missing - forcing mock mode even though mock=False")
+			except:
+				pass
+		else:
+			self.mock = False
+		
 		self.model_name = model_name
 		self.api_key = api_key
 		self.base_url = "https://generativelanguage.googleapis.com/v1beta"
+		
+		# Log initialization
+		try:
+			if current_app:
+				current_app.logger.info(f"EnhancedAIService: mock={self.mock}, model={self.model_name}, has_api_key={bool(self.api_key)}")
+		except:
+			pass
 
 	def _mock_analysis(self, quiz_data: Dict[str, Any]) -> Dict[str, Any]:
 		"""
@@ -206,7 +229,20 @@ class EnhancedAIService:
 			quiz_data["questions_list"] = add_confidence_scores(questions_list)
 		
 		if self.mock:
+			# Log that we're using mock mode
+			try:
+				if current_app:
+					current_app.logger.info("📊 Using mock analysis (mock mode enabled)")
+			except:
+				pass
 			return self._mock_analysis(quiz_data)
+		
+		# Log that we're calling real AI
+		try:
+			if current_app:
+				current_app.logger.info(f"🤖 Calling Gemini API: model={self.model_name}, api_key_present={bool(self.api_key)}")
+		except:
+			pass
 		
 		# Check cache (Decision 13: Option A - Cache by input hash)
 		cache = None
@@ -221,7 +257,20 @@ class EnhancedAIService:
 			cache_key = f"ai:analyze:{hashlib.sha256(json.dumps(quiz_data, sort_keys=True).encode()).hexdigest()}"
 			cached = cache.get(cache_key)
 			if cached:
+				# Log cache hit
+				try:
+					if current_app:
+						current_app.logger.info("📦 Cache hit - returning cached analysis (no API call)")
+				except:
+					pass
 				return cached
+			else:
+				# Log cache miss
+				try:
+					if current_app:
+						current_app.logger.info("📦 Cache miss - will make API call")
+				except:
+					pass
 		
 		# Build prompt with system instruction
 		user_prompt = build_user_prompt(quiz_data)
@@ -283,19 +332,89 @@ class EnhancedAIService:
 		}
 		
 		try:
-			response = requests.post(url, json=payload, headers=headers, params=params, timeout=60)
+			# Log API call attempt
+			try:
+				if current_app:
+					current_app.logger.info(f"📡 Calling Gemini API: {url} (model: {self.model_name})")
+			except:
+				pass
+			
+			# Increase timeout for complex diagnostic analysis (90 seconds)
+			# This gives more time for structured output generation
+			response = requests.post(url, json=payload, headers=headers, params=params, timeout=90)
+			
+			# Log response status
+			try:
+				if current_app:
+					current_app.logger.info(f"📥 Gemini API response: Status {response.status_code}")
+			except:
+				pass
 			
 			# Check status before raising
 			if response.status_code != 200:
 				# Get detailed error message
 				try:
 					error_data = response.json()
-					error_msg = error_data.get("error", {}).get("message", str(error_data))
-					error_code = error_data.get("error", {}).get("code", response.status_code)
+					
+					# Check if error is at top level (e.g., {"error": "ERROR_USER_ABORTED_REQUEST", "details": {...}})
+					top_level_error = error_data.get("error")
+					if isinstance(top_level_error, str) and "USER_ABORTED_REQUEST" in top_level_error.upper():
+						# This is the format the user is seeing
+						details = error_data.get("details", {})
+						detail_msg = details.get("detail", "") if isinstance(details, dict) else details.get("title", "")
+						
+						if detail_msg:
+							user_friendly_msg = f"The AI analysis request was interrupted: {detail_msg}. Please try again."
+						else:
+							user_friendly_msg = "The AI analysis request was interrupted. This may happen if the request takes too long. Please try again."
+						
+						if current_app:
+							current_app.logger.warning(f"Gemini API request aborted: {top_level_error}")
+							current_app.logger.warning(f"Error details: {details}")
+						raise AIAPIError(user_friendly_msg, 408)
+					
+					# Otherwise, try nested error structure
+					error_obj = error_data.get("error", {})
+					if isinstance(error_obj, str):
+						error_msg = error_obj
+						error_code = response.status_code
+						error_type = ""
+					else:
+						error_msg = error_obj.get("message", str(error_data))
+						error_code = error_obj.get("code", response.status_code)
+						error_type = error_obj.get("status", "")
+					
+					# Check for specific error types in nested structure
+					# Handle ERROR_USER_ABORTED_REQUEST in various formats
+					error_str = str(error_data).upper()
+					has_abort_error = (
+						"USER_ABORTED_REQUEST" in error_msg.upper() or
+						"USER_ABORTED_REQUEST" in error_str or
+						"ERROR_USER_ABORTED_REQUEST" in error_str or
+						top_level_error == "ERROR_USER_ABORTED_REQUEST"
+					)
+					
+					if has_abort_error:
+						# Request was aborted - could be timeout or user cancellation
+						# Extract details if available
+						details = error_data.get("details", {})
+						detail_msg = details.get("detail", "") if isinstance(details, dict) else ""
+						
+						if detail_msg:
+							user_friendly_msg = f"The AI analysis request was interrupted: {detail_msg}. Please try again."
+						else:
+							user_friendly_msg = "The AI analysis request was interrupted. This may happen if the request takes too long. Please try again with a smaller quiz or wait a moment and retry."
+						
+						if current_app:
+							current_app.logger.warning(f"Gemini API request aborted: {error_msg}")
+							current_app.logger.warning(f"Error details: {details}")
+							current_app.logger.warning(f"Full error: {error_data}")
+						raise AIAPIError(user_friendly_msg, 408)  # 408 Request Timeout
 					
 					# Log full error for debugging
 					if current_app:
 						current_app.logger.error(f"Gemini API error (Status {response.status_code}): {error_msg}")
+						current_app.logger.error(f"Error type: {error_type}, Code: {error_code}")
 						current_app.logger.error(f"Full error response: {error_data}")
 						current_app.logger.error(f"Request URL: {url}")
 						current_app.logger.error(f"Model: {self.model_name}")
@@ -305,11 +424,22 @@ class EnhancedAIService:
 						f"Gemini API error (Status {response.status_code}): {error_msg}", 
 						response.status_code
 					)
-				except (ValueError, KeyError):
+				except AIAPIError:
+					# Re-raise AIAPIError as-is
+					raise
+				except (ValueError, KeyError, json.JSONDecodeError):
 					# If can't parse error, raise with response text
 					error_msg = response.text[:500]
 					if current_app:
 						current_app.logger.error(f"Gemini API error (Status {response.status_code}): {error_msg}")
+					
+					# Check if it's an aborted request even if we can't parse JSON
+					if "abort" in error_msg.lower() or "timeout" in error_msg.lower():
+						raise AIAPIError(
+							"The AI analysis request was interrupted or timed out. Please try again.",
+							408
+						)
+					
 					raise AIAPIError(
 						f"Gemini API error (Status {response.status_code}): {error_msg}",
 						response.status_code
@@ -336,6 +466,36 @@ class EnhancedAIService:
 			
 			raise ValueError(f"Unexpected response format: {data}")
 			
+		except requests.exceptions.Timeout as e:
+			# Handle timeout errors specifically
+			if current_app:
+				current_app.logger.error(f"Gemini API timeout: Request took longer than 60 seconds")
+			raise AIAPIError(
+				"The AI analysis request timed out. The request is taking too long to process. Please try again or reduce the number of questions.",
+				408
+			)
+		except requests.exceptions.ConnectionError as e:
+			# Handle connection errors
+			if current_app:
+				current_app.logger.error(f"Gemini API connection error: {str(e)}")
+			raise AIAPIError(
+				"Failed to connect to the AI service. Please check your internet connection and try again.",
+				503
+			)
+		except requests.exceptions.RequestException as e:
+			# Handle other request exceptions
+			if current_app:
+				current_app.logger.error(f"Gemini API request error: {str(e)}")
+			# Check if it's an abort/timeout
+			if "abort" in str(e).lower() or "timeout" in str(e).lower():
+				raise AIAPIError(
+					"The AI analysis request was interrupted. Please try again.",
+					408
+				)
+			raise AIAPIError(
+				f"AI service request error: {str(e)}",
+				503
+			)
 		except requests.exceptions.HTTPError as e:
 			error_code = None
 			error_message = ""
@@ -345,11 +505,40 @@ class EnhancedAIService:
 					error_data = e.response.json()
 					# Extract detailed error message
 					if isinstance(error_data, dict):
-						error_message = error_data.get("error", {}).get("message", str(error_data))
+						error_obj = error_data.get("error", {})
+						error_message = error_obj.get("message", str(error_data))
+						
+						# Check for USER_ABORTED_REQUEST in error data (various formats)
+						error_str = str(error_data).upper()
+						has_abort_error = (
+							"USER_ABORTED_REQUEST" in error_message.upper() or
+							"USER_ABORTED_REQUEST" in error_str or
+							"ERROR_USER_ABORTED_REQUEST" in error_str or
+							error_data.get("error") == "ERROR_USER_ABORTED_REQUEST"
+						)
+						
+						if has_abort_error:
+							# Extract details if available
+							details = error_data.get("details", {})
+							detail_msg = details.get("detail", "") if isinstance(details, dict) else ""
+							
+							if detail_msg:
+								user_msg = f"The AI analysis request was interrupted: {detail_msg}. Please try again."
+							else:
+								user_msg = "The AI analysis request was interrupted. This may happen if the request takes too long. Please try again."
+							
+							if current_app:
+								current_app.logger.warning(f"Gemini API request aborted: {error_message}")
+								current_app.logger.warning(f"Error details: {details}")
+							raise AIAPIError(user_msg, 408)
+						
 						if not error_message:
 							error_message = str(error_data)
 					else:
 						error_message = str(error_data)
+				except AIAPIError:
+					# Re-raise if we already raised AIAPIError for aborted request
+					raise
 				except:
 					error_message = e.response.text or str(e)
 			else:
@@ -394,11 +583,21 @@ class EnhancedAIService:
 			Validated and corrected response
 		"""
 		questions_list = quiz_data.get("questions_list", [])
+		time_taken = quiz_data.get("time_taken", 0)
+		subject = quiz_data.get("subject", "Mathematics")
 		
 		# Validate overall_performance
 		if "overall_performance" not in result:
 			raise ValueError("Missing 'overall_performance' in AI response")
 		
+		# Fix Issue 2: Validate and recalculate overall_performance from actual quiz data
+		result["overall_performance"] = validate_and_correct_overall_performance(
+			result["overall_performance"],
+			questions_list,
+			time_taken
+		)
+		
+		# Get corrected overall_accuracy for JAMB score calculation
 		overall_perf = result["overall_performance"]
 		overall_accuracy = overall_perf.get("accuracy", 0)
 		
@@ -406,9 +605,17 @@ class EnhancedAIService:
 		if "topic_breakdown" not in result:
 			raise ValueError("Missing 'topic_breakdown' in AI response")
 		
+		# Fix Issue 1: Ensure all topics from questions are included in breakdown
+		result["topic_breakdown"] = ensure_all_topics_in_breakdown(
+			result["topic_breakdown"],
+			questions_list,
+			subject
+		)
+		
+		# Validate and correct each topic in breakdown
 		corrected_breakdown = []
 		for topic in result["topic_breakdown"]:
-			# Validate and correct Fluency Index
+			# Fix Issue 4: Validate and correct Fluency Index (ensures it's always a number)
 			corrected_topic = validate_and_correct_fluency_index(topic, questions_list)
 			
 			# Validate and correct status
@@ -451,7 +658,8 @@ class EnhancedAIService:
 			validated_dist[error_type] = count
 		rca["error_distribution"] = validated_dist
 		
-		# Validate and correct predicted_jamb_score
+		# Fix Issue 3: Validate and correct predicted_jamb_score
+		# This ensures score is 0-400 and confidence_interval is not "N/A"
 		if "predicted_jamb_score" not in result:
 			raise ValueError("Missing 'predicted_jamb_score' in AI response")
 		

@@ -37,21 +37,59 @@ def get_questions():
 	return jsonify(questions), 200
 
 
-@quiz_bp.post("/quiz/start")
+@quiz_bp.post("/start")
 @require_auth
 @validate_json(StartQuizRequest)
 def start_quiz(current_user_id):
 	"""Start a new quiz - requires authentication"""
 	data = request.get_json(force=True) or {}
+	
+	# Ensure user exists in users table (auto-create if needed)
+	try:
+		# Try to get user from JWT payload
+		from ..utils.auth import get_auth
+		auth = get_auth()
+		if auth:
+			auth_header = request.headers.get("Authorization", "")
+			user_info = auth.verify_token(auth_header)
+			if user_info:
+				email = user_info.get("email")
+				name = user_info.get("payload", {}).get("user_metadata", {}).get("name", "User")
+				
+				# Check if user exists, if not create it
+				try:
+					_repo().get_user(current_user_id)
+				except (KeyError, AttributeError):
+					# User doesn't exist, create it
+					_repo().upsert_user({
+						"id": current_user_id,
+						"email": email or f"user_{current_user_id}@example.com",
+						"name": name
+					})
+					current_app.logger.info(f"Auto-created user in users table: {current_user_id}")
+	except Exception as e:
+		current_app.logger.warning(f"Could not auto-create user: {str(e)}")
+		# Continue anyway - quiz creation will fail with a clearer error if user doesn't exist
+	
 	# Use authenticated user_id from JWT, not from request body
-	quiz = _repo().create_quiz({
-		"user_id": current_user_id,
-		"total_questions": int(data.get("totalQuestions", 30))
-	})
-	return jsonify(quiz), 201
+	try:
+		quiz = _repo().create_quiz({
+			"user_id": current_user_id,
+			"total_questions": int(data.get("totalQuestions", 30))
+		})
+		return jsonify(quiz), 201
+	except Exception as e:
+		current_app.logger.error(f"Error creating quiz: {str(e)}", exc_info=True)
+		error_str = str(e)
+		if "user_id" in error_str and "not present in table" in error_str:
+			return jsonify({
+				"error": "user_not_found", 
+				"message": "User does not exist in database. Please register first."
+			}), 400
+		return jsonify({"error": "server_error", "message": f"Failed to create quiz: {str(e)}"}), 500
 
 
-@quiz_bp.post("/quiz/<quiz_id>/submit")
+@quiz_bp.post("/<quiz_id>/submit")
 @require_auth
 @validate_json(SubmitQuizRequest)
 def submit_quiz(quiz_id: str, current_user_id):
@@ -87,7 +125,7 @@ def submit_quiz(quiz_id: str, current_user_id):
 		return jsonify({"error": "server_error", "message": str(e)}), 500
 
 
-@quiz_bp.get("/quiz/<quiz_id>/results")
+@quiz_bp.get("/<quiz_id>/results")
 @require_auth
 def quiz_results(quiz_id: str, current_user_id):
 	"""Get quiz results - requires authentication and validates ownership"""
@@ -106,12 +144,32 @@ def quiz_results(quiz_id: str, current_user_id):
 		# Verify ownership
 		if not results or results.get("quiz", {}).get("user_id") != current_user_id:
 			return jsonify({"error": "forbidden", "message": "Quiz not found or access denied"}), 403
+		
+		# Ensure diagnostic has all required fields with proper defaults
+		# This is a safety check - the repository should already handle this
+		if results.get("diagnostic"):
+			diagnostic = results["diagnostic"]
+			# Ensure all fields exist, even if empty (check for key existence and None)
+			if "overall_performance" not in diagnostic or diagnostic.get("overall_performance") is None:
+				diagnostic["overall_performance"] = {}
+			if "topic_breakdown" not in diagnostic or diagnostic.get("topic_breakdown") is None:
+				diagnostic["topic_breakdown"] = []
+			if "root_cause_analysis" not in diagnostic or diagnostic.get("root_cause_analysis") is None:
+				diagnostic["root_cause_analysis"] = {}
+			if "predicted_jamb_score" not in diagnostic or diagnostic.get("predicted_jamb_score") is None:
+				diagnostic["predicted_jamb_score"] = {}
+			if "study_plan" not in diagnostic or diagnostic.get("study_plan") is None:
+				diagnostic["study_plan"] = {}
+			if "recommendations" not in diagnostic or diagnostic.get("recommendations") is None:
+				diagnostic["recommendations"] = []
+		
 		if cache:
 			cache.set(key, results, timeout=120)
 		return jsonify(results), 200
 	except KeyError:
 		return jsonify({"error": "not_found", "message": "Quiz not found"}), 404
 	except Exception as e:
+		current_app.logger.error(f"Error in quiz_results: {str(e)}", exc_info=True)
 		return jsonify({"error": "server_error", "message": str(e)}), 500
 
 

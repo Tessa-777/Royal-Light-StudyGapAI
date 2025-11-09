@@ -1,5 +1,6 @@
 from flask import Blueprint, current_app, jsonify, request
 from datetime import datetime, timezone
+import uuid
 
 from ..services.ai_enhanced import EnhancedAIService, AIAPIError
 from ..services.confidence_inference import add_confidence_scores
@@ -11,9 +12,10 @@ from ..utils.schemas import (
 	GenerateStudyPlanRequest, 
 	ExplainAnswerRequest, 
 	AdjustPlanRequest,
-	AnalyzeDiagnosticResponse
+	AnalyzeDiagnosticResponse,
+	SaveDiagnosticRequest
 )
-from ..utils.auth import require_auth, get_current_user_id, get_auth
+from ..utils.auth import require_auth, optional_auth, get_current_user_id, get_auth
 
 
 ai_bp = Blueprint("ai", __name__)
@@ -34,32 +36,50 @@ def _ai():
 	else:
 		mock_mode = str(ai_mock).lower() == "true"
 	
-	return EnhancedAIService(
-		cfg.get("GOOGLE_API_KEY"), 
-		cfg.get("AI_MODEL_NAME", "gemini-1.5-flash"), 
-		mock_mode
-	)
+	api_key = cfg.get("GOOGLE_API_KEY")
+	model_name = cfg.get("AI_MODEL_NAME", "gemini-1.5-flash")
+	
+	# Log AI service initialization for debugging
+	current_app.logger.info(f"Initializing AI Service: mock={mock_mode}, has_api_key={bool(api_key)}, model={model_name}")
+	
+	ai_service = EnhancedAIService(api_key, model_name, mock_mode)
+	
+	# Log final mock mode (EnhancedAIService might override it if API key is missing)
+	current_app.logger.info(f"AI Service initialized: mock={ai_service.mock}, model={ai_service.model_name}")
+	
+	return ai_service
 
 
 @ai_bp.post("/analyze-diagnostic")
-@require_auth
+@optional_auth  # Changed from @require_auth to allow guest users
 @validate_json(AnalyzeDiagnosticRequest)
-def analyze_diagnostic(current_user_id):
+def analyze_diagnostic(current_user_id=None):
 	"""
 	Analyze diagnostic quiz - Enhanced AI/SE implementation
 	Decision 1: Option A - Frontend sends complete quiz data
 	Decision 4: Option A - Study plan included in diagnostic (no separate endpoint)
+	
+	Supports both authenticated and guest users:
+	- Authenticated users: Diagnostic saved to database
+	- Guest users: Diagnostic generated but not saved (frontend stores in localStorage)
 	"""
 	data = request.get_json(force=True) or {}
+	
+	# Determine if user is authenticated (guest mode)
+	is_guest = current_user_id is None
+	if is_guest:
+		current_app.logger.info("👤 Guest user submitting quiz (no authentication)")
+	else:
+		current_app.logger.info(f"👤 Authenticated user submitting quiz: {current_user_id}")
 	
 	# Validate required fields
 	ok, missing = require_fields(data, ["subject", "total_questions", "time_taken", "questions_list"])
 	if not ok:
 		return jsonify({"error": "missing_fields", "fields": missing}), 400
 	
-	# Optional: Verify quiz belongs to current user if quiz_id provided
+	# Optional: Verify quiz belongs to current user if quiz_id provided AND user is authenticated
 	quiz_id = data.get("quiz_id")
-	if quiz_id:
+	if quiz_id and current_user_id:
 		try:
 			quiz_results = _repo().get_quiz_results(quiz_id)
 			if not quiz_results or quiz_results.get("quiz", {}).get("user_id") != current_user_id:
@@ -67,6 +87,10 @@ def analyze_diagnostic(current_user_id):
 		except KeyError:
 			# Quiz doesn't exist, that's okay - we'll create one if needed
 			pass
+	elif quiz_id and is_guest:
+		# Guest users shouldn't provide quiz_id (they don't have quizzes yet)
+		current_app.logger.warning("Guest user provided quiz_id - ignoring it")
+		quiz_id = None
 	
 	# Prepare quiz data for AI service
 	questions_list = [
@@ -95,17 +119,211 @@ def analyze_diagnostic(current_user_id):
 	
 	# Call enhanced AI service
 	try:
-		analysis = _ai().analyze_diagnostic(quiz_data)
+		ai_service = _ai()
+		
+		# Log whether we're using mock or real AI
+		if ai_service.mock:
+			current_app.logger.warning("⚠️⚠️⚠️ USING MOCK AI MODE - No real AI calls will be made! ⚠️⚠️⚠️")
+		else:
+			current_app.logger.info("✅✅✅ Using REAL AI mode - Gemini API will be called ✅✅✅")
+		
+		current_app.logger.info(f"Calling AI service with {len(questions_with_confidence)} questions for analysis")
+		analysis = ai_service.analyze_diagnostic(quiz_data)
+		
+		# Log if analysis was generated
+		if ai_service.mock:
+			current_app.logger.info("📊 Mock analysis generated (no API call made)")
+		else:
+			current_app.logger.info("🤖✅ Real AI analysis generated from Gemini API - Check your API usage!")
+			
 	except AIAPIError as e:
-		return jsonify({"error": "ai_service_error", "message": e.message}), e.status_code
+		current_app.logger.error(f"AI API error: {e.message} (Status: {e.status_code})", exc_info=True)
+		# Return user-friendly error message
+		error_response = {
+			"error": "ai_service_error",
+			"message": e.message,
+			"status_code": e.status_code
+		}
+		# Add retry suggestion for timeout/abort errors
+		if e.status_code == 408:
+			error_response["retryable"] = True
+			error_response["suggestion"] = "The request was interrupted. Please try again in a moment."
+		return jsonify(error_response), e.status_code
 	except ValueError as e:
+		current_app.logger.error(f"Validation error: {str(e)}", exc_info=True)
 		return jsonify({"error": "validation_error", "message": str(e)}), 400
 	except Exception as e:
 		current_app.logger.error(f"Error in analyze_diagnostic: {str(e)}", exc_info=True)
 		return jsonify({"error": "internal_error", "message": "An unexpected error occurred while analyzing diagnostic"}), 500
 	
+	# Handle authenticated users: Ensure user exists and create quiz
+	# For guest users: Skip database operations (diagnostic not saved)
+	if current_user_id:
+		# Authenticated user: Ensure user exists in users table (auto-create if needed)
+		try:
+			user = _repo().get_user(current_user_id)
+			if not user:
+				# User doesn't exist, create them
+				# Try to get email and name from JWT token payload
+				email = f"user_{current_user_id[:8]}@example.com"  # Default placeholder
+				name = "Student"  # Default name
+				
+				# Extract user info from JWT token if available
+				try:
+					auth_header = request.headers.get("Authorization", "")
+					if auth_header:
+						auth = get_auth()
+						if auth:
+							user_info = auth.verify_token(auth_header)
+							if user_info:
+								# Get email from token
+								token_email = user_info.get("email")
+								if token_email:
+									email = token_email
+								
+								# Try to get name from user metadata
+								payload = user_info.get("payload", {})
+								if payload:
+									user_metadata = payload.get("user_metadata", {})
+									if user_metadata and user_metadata.get("name"):
+										name = user_metadata.get("name")
+									elif payload.get("name"):
+										name = payload.get("name")
+				except Exception as e:
+					current_app.logger.debug(f"Could not extract user info from JWT: {str(e)}")
+				
+				# Create user in users table
+				user = _repo().upsert_user({
+					"id": current_user_id,
+					"email": email,
+					"name": name
+				})
+				current_app.logger.info(f"Auto-created user in users table: {current_user_id} ({email})")
+		except Exception as e:
+			current_app.logger.error(f"Error ensuring user exists: {str(e)}", exc_info=True)
+			# Continue anyway - the quiz creation will fail with a clearer error if user still doesn't exist
+		
+		# Create quiz if quiz_id not provided, or verify quiz exists if provided
+		if not quiz_id:
+			# Create new quiz for authenticated user
+			try:
+				quiz = _repo().create_quiz({
+					"user_id": current_user_id,
+					"subject": data["subject"],
+					"total_questions": data["total_questions"],
+					"time_taken_minutes": data["time_taken"],
+					"completed_at": datetime.now(timezone.utc).isoformat(),
+				})
+				quiz_id = quiz.get("id")
+				if not quiz_id:
+					current_app.logger.error(f"Quiz created but no ID returned: {quiz}")
+					return jsonify({"error": "internal_error", "message": "Failed to create quiz - no ID returned"}), 500
+				current_app.logger.info(f"Created quiz for authenticated user: {quiz_id}")
+			except Exception as e:
+				current_app.logger.error(f"Error creating quiz: {str(e)}", exc_info=True)
+				# Check if it's a foreign key error for user_id
+				error_str = str(e)
+				if "user_id" in error_str and "not present in table" in error_str:
+					return jsonify({
+						"error": "user_not_found", 
+						"message": "User does not exist in database. Please ensure user is registered in the users table."
+					}), 400
+				return jsonify({"error": "internal_error", "message": f"Failed to create quiz: {str(e)}"}), 500
+		
+		# Save quiz responses for authenticated users
+		try:
+			responses = [
+				{
+					"question_id": None,  # question_id is optional - can be None if question doesn't exist in DB yet
+					"topic": q.get("topic"),
+					"student_answer": q.get("student_answer"),
+					"correct_answer": q.get("correct_answer"),
+					"is_correct": q.get("is_correct"),
+					"confidence": q.get("confidence", 3),  # Confidence was inferred above
+					"explanation": q.get("explanation", ""),
+					"time_spent_seconds": q.get("time_spent_seconds"),
+				}
+				for idx, q in enumerate(questions_with_confidence)
+			]
+			_repo().save_quiz_responses(quiz_id, responses)
+			current_app.logger.info(f"Saved quiz responses for authenticated user: {quiz_id}")
+		except Exception as e:
+			current_app.logger.error(f"Error saving quiz responses: {str(e)}", exc_info=True)
+			return jsonify({"error": "internal_error", "message": f"Failed to save quiz responses: {str(e)}"}), 500
+		
+		# Save diagnostic to database for authenticated users
+		try:
+			diagnostic = _repo().save_ai_diagnostic({
+				"quiz_id": quiz_id,
+				"analysis_result": analysis,  # Store complete analysis
+				"overall_performance": analysis.get("overall_performance"),
+				"topic_breakdown": analysis.get("topic_breakdown"),
+				"root_cause_analysis": analysis.get("root_cause_analysis"),
+				"predicted_jamb_score": analysis.get("predicted_jamb_score"),
+				"study_plan": analysis.get("study_plan"),  # Study plan included (Decision 4: Option A)
+				"recommendations": analysis.get("recommendations"),
+			})
+			current_app.logger.info(f"Saved diagnostic to database for authenticated user: {diagnostic.get('id')}")
+		except Exception as e:
+			current_app.logger.error(f"Error saving diagnostic: {str(e)}", exc_info=True)
+			return jsonify({"error": "internal_error", "message": f"Failed to save diagnostic: {str(e)}"}), 500
+	else:
+		# Guest user: Don't save to database, just generate diagnostic
+		current_app.logger.info("Guest user: Diagnostic generated but not saved to database (frontend will store in localStorage)")
+		# Generate a temporary diagnostic ID for the response (not saved to DB)
+		diagnostic = {
+			"id": str(uuid.uuid4()),
+			"quiz_id": None,  # No quiz_id for guest users
+			"generated_at": datetime.now(timezone.utc).isoformat()
+		}
+	
+	# Prepare response (same structure for both authenticated and guest users)
+	response_data = {
+		**analysis,
+		"id": diagnostic.get("id"),
+		"quiz_id": quiz_id,  # Will be None for guest users
+		"generated_at": diagnostic.get("generated_at", datetime.now(timezone.utc).isoformat())
+	}
+	
+	# Log response
+	if is_guest:
+		current_app.logger.info(f"✅ Guest diagnostic generated: {response_data.get('id')} (not saved to database)")
+	else:
+		current_app.logger.info(f"✅ Authenticated diagnostic generated and saved: {response_data.get('id')} (quiz_id: {quiz_id})")
+	
+	return jsonify(response_data), 200
+
+
+# Note: Study plan endpoint removed per Decision 4: Option A
+# Study plan is now included in the diagnostic analysis response
+# To get a study plan, use the /analyze-diagnostic endpoint
+
+
+@ai_bp.post("/save-diagnostic")
+@require_auth
+@validate_json(SaveDiagnosticRequest)
+def save_diagnostic(current_user_id):
+	"""
+	Save a guest diagnostic to the database after user signs up.
+	
+	This endpoint allows users who took a quiz as guests to save their diagnostic
+	results to the database after creating an account.
+	
+	Flow:
+	1. Guest user takes quiz -> gets diagnostic (stored in localStorage)
+	2. Guest user signs up
+	3. Guest user calls this endpoint to save their diagnostic
+	4. Backend creates quiz, saves responses, and saves diagnostic
+	5. Returns quiz_id for frontend to update localStorage
+	"""
+	data = request.get_json(force=True) or {}
+	
+	# Validate required fields
+	ok, missing = require_fields(data, ["subject", "total_questions", "time_taken", "questions_list", "diagnostic"])
+	if not ok:
+		return jsonify({"error": "missing_fields", "fields": missing}), 400
+	
 	# Ensure user exists in users table (auto-create if needed)
-	# This handles cases where user authenticated via Supabase Auth but doesn't exist in users table yet
 	try:
 		user = _repo().get_user(current_user_id)
 		if not user:
@@ -149,82 +367,80 @@ def analyze_diagnostic(current_user_id):
 		current_app.logger.error(f"Error ensuring user exists: {str(e)}", exc_info=True)
 		# Continue anyway - the quiz creation will fail with a clearer error if user still doesn't exist
 	
-	# Create quiz if quiz_id not provided, or verify quiz exists if provided
-	if not quiz_id:
-		# Create new quiz
-		try:
-			quiz = _repo().create_quiz({
-				"user_id": current_user_id,
-				"subject": data["subject"],
-				"total_questions": data["total_questions"],
-				"time_taken_minutes": data["time_taken"],
-				"completed_at": datetime.now(timezone.utc).isoformat(),
-			})
-			quiz_id = quiz.get("id")
-			if not quiz_id:
-				current_app.logger.error(f"Quiz created but no ID returned: {quiz}")
-				return jsonify({"error": "internal_error", "message": "Failed to create quiz - no ID returned"}), 500
-		except Exception as e:
-			current_app.logger.error(f"Error creating quiz: {str(e)}", exc_info=True)
-			# Check if it's a foreign key error for user_id
-			error_str = str(e)
-			if "user_id" in error_str and "not present in table" in error_str:
-				return jsonify({
-					"error": "user_not_found", 
-					"message": "User does not exist in database. Please ensure user is registered in the users table."
-				}), 400
-			return jsonify({"error": "internal_error", "message": f"Failed to create quiz: {str(e)}"}), 500
-	
-	# Save quiz responses (always save responses, even if quiz_id was provided)
+	# Create quiz
 	try:
-		responses = [
-			{
-				"question_id": None,  # question_id is optional - can be None if question doesn't exist in DB yet
-				"topic": q.get("topic"),
-				"student_answer": q.get("student_answer"),
-				"correct_answer": q.get("correct_answer"),
-				"is_correct": q.get("is_correct"),
-				"confidence": q.get("confidence", 3),  # Confidence was inferred above
-				"explanation": q.get("explanation", ""),
-				"time_spent_seconds": q.get("time_spent_seconds"),
-			}
-			for idx, q in enumerate(questions_with_confidence)
-		]
+		quiz = _repo().create_quiz({
+			"user_id": current_user_id,
+			"subject": data["subject"],
+			"total_questions": data["total_questions"],
+			"time_taken_minutes": data["time_taken"],
+			"completed_at": datetime.now(timezone.utc).isoformat(),
+		})
+		quiz_id = quiz.get("id")
+		if not quiz_id:
+			current_app.logger.error(f"Quiz created but no ID returned: {quiz}")
+			return jsonify({"error": "internal_error", "message": "Failed to create quiz - no ID returned"}), 500
+		current_app.logger.info(f"Created quiz for user: {quiz_id}")
+	except Exception as e:
+		current_app.logger.error(f"Error creating quiz: {str(e)}", exc_info=True)
+		error_str = str(e)
+		if "user_id" in error_str and "not present in table" in error_str:
+			return jsonify({
+				"error": "user_not_found", 
+				"message": "User does not exist in database. Please ensure user is registered."
+			}), 400
+		return jsonify({"error": "internal_error", "message": f"Failed to create quiz: {str(e)}"}), 500
+	
+	# Prepare quiz responses
+	questions_list = data["questions_list"]
+	responses = [
+		{
+			"question_id": None,  # question_id is optional
+			"topic": q.get("topic"),
+			"student_answer": q.get("student_answer"),
+			"correct_answer": q.get("correct_answer"),
+			"is_correct": q.get("is_correct"),
+			"confidence": q.get("confidence", 3),
+			"explanation": q.get("explanation", ""),
+			"time_spent_seconds": q.get("time_spent_seconds"),
+		}
+		for q in questions_list
+	]
+	
+	# Save quiz responses
+	try:
 		_repo().save_quiz_responses(quiz_id, responses)
+		current_app.logger.info(f"Saved quiz responses for quiz: {quiz_id}")
 	except Exception as e:
 		current_app.logger.error(f"Error saving quiz responses: {str(e)}", exc_info=True)
 		return jsonify({"error": "internal_error", "message": f"Failed to save quiz responses: {str(e)}"}), 500
+	
+	# Extract diagnostic data
+	diagnostic_data = data["diagnostic"]
 	
 	# Save diagnostic to database
 	try:
 		diagnostic = _repo().save_ai_diagnostic({
 			"quiz_id": quiz_id,
-			"analysis_result": analysis,  # Store complete analysis
-			"overall_performance": analysis.get("overall_performance"),
-			"topic_breakdown": analysis.get("topic_breakdown"),
-			"root_cause_analysis": analysis.get("root_cause_analysis"),
-			"predicted_jamb_score": analysis.get("predicted_jamb_score"),
-			"study_plan": analysis.get("study_plan"),  # Study plan included (Decision 4: Option A)
-			"recommendations": analysis.get("recommendations"),
+			"analysis_result": diagnostic_data,  # Store complete diagnostic as analysis_result
+			"overall_performance": diagnostic_data.get("overall_performance"),
+			"topic_breakdown": diagnostic_data.get("topic_breakdown"),
+			"root_cause_analysis": diagnostic_data.get("root_cause_analysis"),
+			"predicted_jamb_score": diagnostic_data.get("predicted_jamb_score"),
+			"study_plan": diagnostic_data.get("study_plan"),
+			"recommendations": diagnostic_data.get("recommendations"),
 		})
+		current_app.logger.info(f"Saved diagnostic to database: {diagnostic.get('id')} (quiz_id: {quiz_id})")
 	except Exception as e:
 		current_app.logger.error(f"Error saving diagnostic: {str(e)}", exc_info=True)
 		return jsonify({"error": "internal_error", "message": f"Failed to save diagnostic: {str(e)}"}), 500
 	
-	# Prepare response
-	response_data = {
-		**analysis,
-		"id": diagnostic.get("id"),
+	# Return quiz_id for frontend to update localStorage
+	return jsonify({
 		"quiz_id": quiz_id,
-		"generated_at": diagnostic.get("generated_at", datetime.now(timezone.utc).isoformat())
-	}
-	
-	return jsonify(response_data), 200
-
-
-# Note: Study plan endpoint removed per Decision 4: Option A
-# Study plan is now included in the diagnostic analysis response
-# To get a study plan, use the /analyze-diagnostic endpoint
+		"diagnostic_id": diagnostic.get("id"),
+		"message": "Diagnostic saved successfully"
+	}), 200
 
 
 @ai_bp.post("/explain-answer")

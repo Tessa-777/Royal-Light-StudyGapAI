@@ -147,3 +147,17 @@ class AdjustPlanRequest(BaseModel):
 	newWeakTopics: List[str]
 
 
+class SaveDiagnosticRequest(BaseModel):
+	"""Request to save a guest diagnostic after user signs up"""
+	# Quiz data (original submission)
+	subject: str = Field(description="Subject name (e.g., 'Mathematics')")
+	total_questions: int = Field(gt=0, description="Total number of questions")
+	time_taken: float = Field(gt=0, description="Total time taken in minutes")
+	questions_list: List[QuestionResponse] = Field(min_length=1, description="List of question responses")
+	
+	# Diagnostic data (from the guest diagnostic response)
+	# Using Dict[str, Any] instead of AnalyzeDiagnosticResponse to be more flexible
+	# The diagnostic might have additional fields or slightly different structure
+	diagnostic: Dict[str, Any] = Field(description="Complete diagnostic result from guest submission")
+
+

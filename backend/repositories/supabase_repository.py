@@ -196,7 +196,95 @@ class SupabaseRepository(Repository):
 			
 			if not quiz:
 				raise KeyError(f"Quiz {quiz_id} not found")
-			return {"quiz": quiz, "responses": responses}
+			
+			# Get diagnostic data if it exists
+			diagnostic = None
+			try:
+				diagnostic_response = self.client.table("ai_diagnostics").select("*").eq("quiz_id", quiz_id).maybe_single().execute()
+				if diagnostic_response and hasattr(diagnostic_response, 'data') and diagnostic_response.data:
+					diagnostic_raw = diagnostic_response.data
+					
+					# Format diagnostic to match analyze-diagnostic response format
+					# Handle analysis_result (JSONB field from Supabase)
+					import json
+					analysis_result = diagnostic_raw.get("analysis_result")
+					
+					# Parse analysis_result if it's a string (Supabase sometimes returns JSONB as string)
+					if isinstance(analysis_result, str):
+						try:
+							analysis_result = json.loads(analysis_result)
+						except (json.JSONDecodeError, TypeError):
+							analysis_result = None
+					
+					# Helper function to parse JSONB fields (might be dict, string, or None)
+					def parse_jsonb_field(field_value):
+						if field_value is None:
+							return None
+						if isinstance(field_value, str):
+							try:
+								return json.loads(field_value)
+							except (json.JSONDecodeError, TypeError):
+								return field_value
+						# If it's already a dict/list, return as-is
+						return field_value
+					
+					# Initialize diagnostic with basic fields
+					diagnostic = {
+						"id": diagnostic_raw.get("id"),
+						"quiz_id": diagnostic_raw.get("quiz_id"),
+						"generated_at": diagnostic_raw.get("generated_at"),
+					}
+					
+					# Extract fields from analysis_result first (primary source)
+					if analysis_result and isinstance(analysis_result, dict):
+						# Extract from analysis_result - this is the primary source of truth
+						diagnostic["overall_performance"] = analysis_result.get("overall_performance")
+						diagnostic["topic_breakdown"] = analysis_result.get("topic_breakdown")
+						diagnostic["root_cause_analysis"] = analysis_result.get("root_cause_analysis")
+						diagnostic["predicted_jamb_score"] = analysis_result.get("predicted_jamb_score")
+						diagnostic["study_plan"] = analysis_result.get("study_plan")
+						diagnostic["recommendations"] = analysis_result.get("recommendations")
+					
+					# Fallback to denormalized fields if field is None or missing (check for None, not falsy)
+					if "overall_performance" not in diagnostic or diagnostic.get("overall_performance") is None:
+						diagnostic["overall_performance"] = parse_jsonb_field(diagnostic_raw.get("overall_performance"))
+					if "topic_breakdown" not in diagnostic or diagnostic.get("topic_breakdown") is None:
+						diagnostic["topic_breakdown"] = parse_jsonb_field(diagnostic_raw.get("topic_breakdown"))
+					if "root_cause_analysis" not in diagnostic or diagnostic.get("root_cause_analysis") is None:
+						diagnostic["root_cause_analysis"] = parse_jsonb_field(diagnostic_raw.get("root_cause_analysis"))
+					if "predicted_jamb_score" not in diagnostic or diagnostic.get("predicted_jamb_score") is None:
+						diagnostic["predicted_jamb_score"] = parse_jsonb_field(diagnostic_raw.get("predicted_jamb_score"))
+					if "study_plan" not in diagnostic or diagnostic.get("study_plan") is None:
+						diagnostic["study_plan"] = parse_jsonb_field(diagnostic_raw.get("study_plan"))
+					if "recommendations" not in diagnostic or diagnostic.get("recommendations") is None:
+						diagnostic["recommendations"] = parse_jsonb_field(diagnostic_raw.get("recommendations"))
+					
+					# Ensure all required fields have default values (never return None/undefined)
+					# Use is None check (not falsy check) to preserve empty dicts/lists
+					if diagnostic.get("overall_performance") is None:
+						diagnostic["overall_performance"] = {}
+					if diagnostic.get("topic_breakdown") is None:
+						diagnostic["topic_breakdown"] = []
+					if diagnostic.get("root_cause_analysis") is None:
+						diagnostic["root_cause_analysis"] = {}
+					if diagnostic.get("predicted_jamb_score") is None:
+						diagnostic["predicted_jamb_score"] = {}
+					if diagnostic.get("study_plan") is None:
+						diagnostic["study_plan"] = {}
+					if diagnostic.get("recommendations") is None:
+						diagnostic["recommendations"] = []
+			except Exception as e:
+				# Log error for debugging
+				import logging
+				logging.error(f"Error fetching diagnostic for quiz {quiz_id}: {str(e)}", exc_info=True)
+				# Diagnostic doesn't exist or error fetching - that's okay
+				diagnostic = None
+			
+			return {
+				"quiz": quiz,
+				"responses": responses,
+				"diagnostic": diagnostic  # Include diagnostic data if available
+			}
 		except Exception as e:
 			raise KeyError(f"Quiz {quiz_id} not found") from e
 

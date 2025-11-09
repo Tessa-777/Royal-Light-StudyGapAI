@@ -18,7 +18,24 @@ load_dotenv()
 def create_app() -> Flask:
 	app = Flask(__name__)
 	app.config.from_object(AppConfig)
-	CORS(app, resources={r"/api/*": {"origins": os.getenv("CORS_ORIGINS", "*")}})
+	
+	# Enhanced CORS configuration
+	# Get CORS origins from environment, default to localhost for development
+	cors_origins_env = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+	# Support comma-separated origins, or "*" for all origins
+	if cors_origins_env == "*":
+		origins_list = "*"
+	else:
+		origins_list = [origin.strip() for origin in cors_origins_env.split(",")]
+	
+	CORS(app, 
+		 resources={r"/api/*": {
+			 "origins": origins_list,
+			 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+			 "allow_headers": ["Content-Type", "Authorization"],
+			 "supports_credentials": True
+		 }}
+	)
 
 	# Cache setup (simple in-memory)
 	from flask_caching import Cache
@@ -89,7 +106,7 @@ def create_app() -> Flask:
 
 	# Register blueprints
 	app.register_blueprint(users_bp, url_prefix="/api/users")
-	app.register_blueprint(quiz_bp, url_prefix="/api")
+	app.register_blueprint(quiz_bp, url_prefix="/api/quiz")  # Changed from /api to /api/quiz
 	app.register_blueprint(ai_bp, url_prefix="/api/ai")
 	app.register_blueprint(progress_bp, url_prefix="/api")
 	app.register_blueprint(analytics_bp, url_prefix="/api")

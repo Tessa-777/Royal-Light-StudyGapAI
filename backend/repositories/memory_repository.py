@@ -179,9 +179,66 @@ class InMemoryRepository(Repository):
 	def get_quiz_results(self, quiz_id: str) -> Dict[str, Any]:
 		if quiz_id not in self.quizzes:
 			raise KeyError(f"Quiz {quiz_id} not found")
+		
+		# Get diagnostic data if it exists
+		diagnostic = None
+		for diag_id, diag_data in self.ai_diagnostics.items():
+			if diag_data.get("quiz_id") == quiz_id:
+				diagnostic_raw = diag_data
+				
+				# Initialize diagnostic with basic fields
+				diagnostic = {
+					"id": diagnostic_raw.get("id"),
+					"quiz_id": diagnostic_raw.get("quiz_id"),
+					"generated_at": diagnostic_raw.get("generated_at"),
+				}
+				
+				# Extract fields from analysis_result first (primary source)
+				analysis_result = diagnostic_raw.get("analysis_result")
+				if analysis_result and isinstance(analysis_result, dict):
+					# Extract from analysis_result - this is the primary source of truth
+					diagnostic["overall_performance"] = analysis_result.get("overall_performance")
+					diagnostic["topic_breakdown"] = analysis_result.get("topic_breakdown")
+					diagnostic["root_cause_analysis"] = analysis_result.get("root_cause_analysis")
+					diagnostic["predicted_jamb_score"] = analysis_result.get("predicted_jamb_score")
+					diagnostic["study_plan"] = analysis_result.get("study_plan")
+					diagnostic["recommendations"] = analysis_result.get("recommendations")
+				
+				# Fallback to denormalized fields if field is None or missing (check for None, not falsy)
+				if "overall_performance" not in diagnostic or diagnostic.get("overall_performance") is None:
+					diagnostic["overall_performance"] = diagnostic_raw.get("overall_performance")
+				if "topic_breakdown" not in diagnostic or diagnostic.get("topic_breakdown") is None:
+					diagnostic["topic_breakdown"] = diagnostic_raw.get("topic_breakdown")
+				if "root_cause_analysis" not in diagnostic or diagnostic.get("root_cause_analysis") is None:
+					diagnostic["root_cause_analysis"] = diagnostic_raw.get("root_cause_analysis")
+				if "predicted_jamb_score" not in diagnostic or diagnostic.get("predicted_jamb_score") is None:
+					diagnostic["predicted_jamb_score"] = diagnostic_raw.get("predicted_jamb_score")
+				if "study_plan" not in diagnostic or diagnostic.get("study_plan") is None:
+					diagnostic["study_plan"] = diagnostic_raw.get("study_plan")
+				if "recommendations" not in diagnostic or diagnostic.get("recommendations") is None:
+					diagnostic["recommendations"] = diagnostic_raw.get("recommendations")
+				
+				# Ensure all required fields have default values (never return None/undefined)
+				# Use is None check (not falsy check) to preserve empty dicts/lists
+				if diagnostic.get("overall_performance") is None:
+					diagnostic["overall_performance"] = {}
+				if diagnostic.get("topic_breakdown") is None:
+					diagnostic["topic_breakdown"] = []
+				if diagnostic.get("root_cause_analysis") is None:
+					diagnostic["root_cause_analysis"] = {}
+				if diagnostic.get("predicted_jamb_score") is None:
+					diagnostic["predicted_jamb_score"] = {}
+				if diagnostic.get("study_plan") is None:
+					diagnostic["study_plan"] = {}
+				if diagnostic.get("recommendations") is None:
+					diagnostic["recommendations"] = []
+				
+				break
+		
 		return {
 			"quiz": self.quizzes[quiz_id],
 			"responses": self.quiz_responses.get(quiz_id, []),
+			"diagnostic": diagnostic  # Include diagnostic data if available
 		}
 
 	# AI Diagnostics / Study Plans

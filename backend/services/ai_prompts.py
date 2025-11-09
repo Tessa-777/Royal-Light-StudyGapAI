@@ -15,8 +15,9 @@ CORE RULES:
 • Nigerian Context: Reference JAMB exam standards (400 points max, 60+ questions typical).
 
 TOPIC CATEGORIZATION LOGIC:
-1. Calculate Fluency Index (FI): FI = (Topic Accuracy) * (Average Topic Confidence / 5)
-2. Assign Status:
+1. IMPORTANT: Identify ALL distinct topics from the questions. Every topic mentioned in the questions must appear in topic_breakdown.
+2. Calculate Fluency Index (FI): FI = (Topic Accuracy) * (Average Topic Confidence / 5)
+3. Assign Status:
    - WEAK: FI < 50 OR Accuracy < 60%
    - DEVELOPING: FI 50-70 OR Accuracy 60-75%
    - STRONG: FI > 70 AND Accuracy > 75%
