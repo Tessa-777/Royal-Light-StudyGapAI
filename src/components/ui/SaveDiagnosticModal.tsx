@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 import Button from './Button';
 import Card from './Card';
 

@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -9,7 +8,6 @@ import RegisterPage from './pages/RegisterPage';
 import QuizPage from './pages/QuizPage';
 import DiagnosticResultsPage from './pages/DiagnosticResultsPage';
 import StudyPlanPage from './pages/StudyPlanPage';
-import ProgressPage from './pages/ProgressPage';
 import ResourcesPage from './pages/ResourcesPage';
 import DashboardPage from './pages/DashboardPage';
 
@@ -25,7 +23,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000, // 5 minutes
-      cacheTime: 30 * 60 * 1000, // 30 minutes
+      gcTime: 30 * 60 * 1000, // 30 minutes (formerly cacheTime in v4)
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
       retry: (failureCount, error: any) => {

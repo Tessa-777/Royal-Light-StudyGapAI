@@ -6,7 +6,7 @@ import { useProgress } from '../hooks/useProgress';
 import { useAuth } from '../hooks/useAuth';
 
 const ProgressPage = () => {
-  const { profile } = useAuth();
+  useAuth();
   const { data: progress, isLoading, error } = useProgress();
 
   if (isLoading) {

@@ -13,7 +13,7 @@ import endpoints from '../services/endpoints';
 import { AnalyzeDiagnosticResponse } from '../hooks/useDiagnostic';
 
 const DashboardPage = () => {
-  const { profile, isAuthenticated } = useAuth();
+  const { profile } = useAuth();
   const authState = isAuthenticatedSync();
   const [diagnostic, setDiagnostic] = useState<AnalyzeDiagnosticResponse | null>(null);
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);

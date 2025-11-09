@@ -3,7 +3,7 @@
  * Handles user authentication via Supabase Auth SDK
  */
 
-import { createClient, SupabaseClient, AuthResponse, User } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import api from './api';
 import endpoints from './endpoints';
 

@@ -18,7 +18,6 @@ type BarChartProps = {
 const BarChart = ({
   data,
   title,
-  xAxisLabel,
   yAxisLabel,
   horizontal = false,
   height = 300,

@@ -12,6 +12,8 @@ type InputProps = {
   required?: boolean;
   disabled?: boolean;
   className?: string;
+  min?: string;
+  max?: string;
 };
 
 const Input = ({
@@ -24,7 +26,9 @@ const Input = ({
   error,
   required = false,
   disabled = false,
-  className = ''
+  className = '',
+  min,
+  max
 }: InputProps) => {
   const [showPassword, setShowPassword] = useState(false);
 
@@ -48,6 +52,8 @@ const Input = ({
           onChange={onChange}
           disabled={disabled}
           required={required}
+          min={min}
+          max={max}
           className={`
             w-full px-3 py-2 border rounded-md 
             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500

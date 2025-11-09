@@ -6,7 +6,7 @@ import Card from '../components/ui/Card';
 import ProgressBar from '../components/ui/ProgressBar';
 import GuestModeBanner from '../components/ui/GuestModeBanner';
 import ResumeQuizModal from '../components/ui/ResumeQuizModal';
-import { useQuiz, type Question, type QuestionResponse } from '../hooks/useQuiz';
+import { useQuiz } from '../hooks/useQuiz';
 import { isAuthenticatedSync } from '../services/auth';
 
 const QuizPage = () => {
