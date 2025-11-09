@@ -15,9 +15,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY . .
 
-# Expose port (Railway/Fly.io will set PORT env var)
-EXPOSE 8000
+# Expose port (Railway will set PORT env var dynamically)
+EXPOSE ${PORT:-5000}
 
-# Run with gunicorn
-CMD ["gunicorn", "backend.app:app", "--workers=2", "--timeout=120", "--bind", "0.0.0.0:8000"]
+# Run with gunicorn using PORT from environment variable
+# Railway provides PORT automatically, fallback to 5000 for local testing
+CMD gunicorn backend.app:app --workers=2 --timeout=120 --bind 0.0.0.0:${PORT:-5000}
 
