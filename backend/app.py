@@ -151,6 +151,24 @@ def create_app() -> Flask:
 		if app.config.get("DEBUG"):
 			print(f"[DEBUG] Supabase Auth initialized (for JWT validation)")
 
+	# Root endpoint
+	@app.get("/")
+	def root() -> tuple:
+		return jsonify({
+			"message": "StudyGapAI Backend API",
+			"status": "running",
+			"version": os.getenv("APP_VERSION", "0.1.0"),
+			"endpoints": {
+				"health": "/health",
+				"users": "/api/users",
+				"quiz": "/api/quiz",
+				"ai": "/api/ai",
+				"progress": "/api/progress",
+				"analytics": "/api/analytics",
+				"resources": "/api/resources"
+			}
+		}), 200
+
 	# Health endpoint
 	@app.get("/health")
 	def health() -> tuple:
