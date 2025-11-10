@@ -144,19 +144,33 @@ export const useQuiz = (totalQuestions: number = 15) => {
   }, [questions]);
 
   // Auto-save quiz data for guest users
+  // Only save when there are actual changes to avoid unnecessary writes
   useEffect(() => {
     if (!isAuthenticatedSync() && quizState.questions.length > 0) {
-      const quizData = {
-        questions: quizState.questions,
-        currentQuestionIndex: quizState.currentQuestionIndex,
-        responses: quizState.responses,
-        timeSpent: quizState.timeSpent,
-        startTime: quizState.startTime,
-        timestamp: new Date().toISOString(),
-      };
-      localStorage.setItem('guest_quiz', JSON.stringify(quizData));
+      // Only save if we have responses or the quiz has started
+      const hasResponses = Object.keys(quizState.responses).length > 0;
+      const hasStarted = quizState.currentQuestionIndex > 0 || hasResponses;
+      
+      if (hasStarted) {
+        const quizData = {
+          questions: quizState.questions,
+          currentQuestionIndex: quizState.currentQuestionIndex,
+          responses: quizState.responses,
+          timeSpent: quizState.timeSpent,
+          startTime: quizState.startTime,
+          timestamp: new Date().toISOString(),
+        };
+        localStorage.setItem('guest_quiz', JSON.stringify(quizData));
+        console.log('[useQuiz] Auto-saved quiz data:', {
+          currentQuestion: quizState.currentQuestionIndex,
+          responsesCount: Object.keys(quizState.responses).length,
+          answeredCount: Object.keys(quizState.responses).filter(
+            (id) => quizState.responses[id]?.student_answer
+          ).length,
+        });
+      }
     }
-  }, [quizState]);
+  }, [quizState.questions.length, quizState.currentQuestionIndex, quizState.responses, quizState.timeSpent, quizState.startTime]);
 
   const startQuiz = useCallback(async () => {
     if (isAuthenticatedSync()) {
@@ -211,37 +225,102 @@ export const useQuiz = (totalQuestions: number = 15) => {
     }));
   }, []);
 
-  // Check if there's a saved guest quiz
+  // Check if there's a saved guest quiz that can be resumed
+  // Only return true if there are answered questions (answeredQuestions > 0)
+  // If answeredQuestions === 0, the quiz is either not started or submitted/completed - don't allow resumption
   const hasSavedQuiz = useCallback((): boolean => {
     if (isAuthenticatedSync()) return false;
     const savedQuiz = localStorage.getItem('guest_quiz');
     if (!savedQuiz) return false;
     try {
       const data = JSON.parse(savedQuiz);
-      return !!(data.questions && data.currentQuestionIndex !== undefined);
+      // Check if quiz data exists
+      if (!data.questions || data.currentQuestionIndex === undefined) return false;
+      
+      // Count answered questions (only count responses with student_answer)
+      const answeredCount = Object.keys(data.responses || {}).filter(
+        (questionId) => data.responses[questionId]?.student_answer
+      ).length;
+      
+      // Only allow resumption if there are answered questions > 0
+      // If answeredQuestions === 0, the quiz is not started or was cleared/submitted - don't show resume option
+      const canResume = answeredCount > 0;
+      
+      console.log('[useQuiz] hasSavedQuiz check:', {
+        answeredCount,
+        canResume,
+        reason: answeredCount === 0 ? 'no answered questions' : 'has answered questions',
+      });
+      
+      return canResume;
     } catch {
       return false;
     }
   }, []);
 
   // Get saved quiz progress info
+  // Only returns progress if there are answered questions > 0
+  // If answeredQuestions === 0, don't show resume option (quiz not started or cleared/submitted)
   const getSavedQuizProgress = useCallback(() => {
     if (isAuthenticatedSync()) return null;
     const savedQuiz = localStorage.getItem('guest_quiz');
-    if (!savedQuiz) return null;
+    if (!savedQuiz) {
+      console.log('[useQuiz] getSavedQuizProgress: No saved quiz in localStorage');
+      return null;
+    }
     try {
       const data = JSON.parse(savedQuiz);
-      if (!data.questions || data.currentQuestionIndex === undefined) return null;
+      if (!data.questions || data.currentQuestionIndex === undefined) {
+        console.log('[useQuiz] getSavedQuizProgress: Invalid quiz data structure');
+        return null;
+      }
       
-      const answeredCount = Object.keys(data.responses || {}).length;
+      const totalQuestions = data.questions.length || 0;
+      const responses = data.responses || {};
+      
+      console.log('[useQuiz] getSavedQuizProgress: Analyzing responses...', {
+        totalResponses: Object.keys(responses).length,
+        responseKeys: Object.keys(responses),
+      });
+      
+      // Count answered questions (only count responses with student_answer)
+      // Also check if student_answer is not empty string
+      const answeredCount = Object.keys(responses).filter(
+        (questionId) => {
+          const response = responses[questionId];
+          const hasAnswer = response?.student_answer && 
+                           response.student_answer.trim() !== '' &&
+                           ['A', 'B', 'C', 'D'].includes(response.student_answer);
+          if (hasAnswer) {
+            console.log('[useQuiz] Found answered question:', questionId, response.student_answer);
+          }
+          return hasAnswer;
+        }
+      ).length;
+      
+      console.log('[useQuiz] getSavedQuizProgress: Answered count:', answeredCount, 'out of', totalQuestions);
+      
+      // Only return progress if there are answered questions > 0
+      // If answeredQuestions === 0, don't show resume option (quiz not started or cleared/submitted)
+      if (answeredCount === 0) {
+        console.log('[useQuiz] getSavedQuizProgress: Quiz cannot be resumed - no answered questions');
+        // Debug: Show sample responses to understand structure
+        const sampleResponses = Object.keys(responses).slice(0, 3).map(key => ({
+          questionId: key,
+          response: responses[key],
+        }));
+        console.log('[useQuiz] getSavedQuizProgress: Sample responses:', sampleResponses);
+        return null;
+      }
       
       return {
         currentQuestion: data.currentQuestionIndex || 0,
-        totalQuestions: data.questions.length || 0,
+        totalQuestions,
         answeredQuestions: answeredCount,
         timestamp: data.timestamp,
       };
-    } catch {
+    } catch (error) {
+      console.error('[useQuiz] getSavedQuizProgress: Error parsing saved quiz:', error);
       return null;
     }
   }, []);
@@ -397,6 +476,12 @@ export const useQuiz = (totalQuestions: number = 15) => {
           },
           timestamp: new Date().toISOString(),
         }));
+        
+        // Clear guest quiz after successful submission
+        // The quiz is complete, so there's nothing to resume
+        localStorage.removeItem('guest_quiz');
+        localStorage.removeItem('guest_quiz_complete');
+        console.log('[useQuiz] Cleared guest_quiz after successful submission');
       }
 
       // Return diagnostic data with quiz_id for navigation

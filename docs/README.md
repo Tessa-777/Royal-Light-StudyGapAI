@@ -11,6 +11,11 @@ This folder contains all project documentation, issue analyses, and technical gu
 - **[RAILWAY_BACKEND_SETUP.md](./RAILWAY_BACKEND_SETUP.md)** - Railway backend configuration and CORS setup
 - **[GITHUB_PAGES_DEPLOYMENT_STEPS.md](../GITHUB_PAGES_DEPLOYMENT_STEPS.md)** - Quick deployment steps
 
+## 🧪 Testing Documentation
+
+- **[TESTING_CHECKLIST.md](./TESTING_CHECKLIST.md)** - Complete testing checklist for all features before demo and going live
+- **[QUICK_TESTING_GUIDE.md](./QUICK_TESTING_GUIDE.md)** - Quick reference guide for critical path testing
+
 ## 🐛 Issue Analysis & Fixes
 
 ### Authentication & User Management

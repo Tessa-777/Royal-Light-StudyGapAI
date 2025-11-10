@@ -120,6 +120,28 @@ The frontend communicates with the backend API at `VITE_API_BASE_URL`. Key endpo
 
 ## 🧪 Testing
 
+### Quick Testing Guide
+
+Before demo and going live, test all features using our comprehensive testing guides:
+
+- **[Quick Testing Guide](./docs/QUICK_TESTING_GUIDE.md)** - Quick reference for critical path testing
+- **[Complete Testing Checklist](./docs/TESTING_CHECKLIST.md)** - Detailed testing checklist for all features
+
+### Critical Tests Before Demo
+
+1. **Authentication**: Register, login, logout, error handling
+2. **Guest Mode**: Start quiz, resume quiz, save to account
+3. **Quiz**: Answer questions, navigation, validation, submission
+4. **Diagnostic**: Results accuracy, weak/strong topics, analysis
+5. **Study Plan**: Generation, personalization, content
+6. **Resources**: Links, filtering, accessibility
+7. **PDF Download**: Generation, content, formatting
+8. **Dashboard**: Display, navigation, statistics
+9. **Mobile**: Responsiveness, touch interactions
+10. **Errors**: Error handling, user-friendly messages
+
+### Development Testing
+
 ```bash
 # Run linter
 npm run lint

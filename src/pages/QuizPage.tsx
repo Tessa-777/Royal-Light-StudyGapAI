@@ -14,6 +14,12 @@ const QuizPage = () => {
   const [showGuestBanner, setShowGuestBanner] = useState(true);
   const [showResumeModal, setShowResumeModal] = useState(false);
   const [quizInitialized, setQuizInitialized] = useState(false);
+  const [savedQuizProgress, setSavedQuizProgress] = useState<{
+    currentQuestion: number;
+    totalQuestions: number;
+    answeredQuestions: number;
+    timestamp?: string;
+  } | null>(null);
   const [explanationErrors, setExplanationErrors] = useState<Record<string, boolean>>({});
   const [questionStartTimes, setQuestionStartTimes] = useState<Record<string, number>>({});
   const questionTimeRef = useRef<NodeJS.Timeout | null>(null);
@@ -81,37 +87,89 @@ const QuizPage = () => {
     };
   }, [currentQuestion?.id]);
 
-  // Check for saved quiz on mount (guest mode only)
+  // Check for saved quiz on mount (guest mode only) - RUN ONLY ONCE
   useEffect(() => {
-    // Prevent multiple calls - only run once
+    // Prevent multiple calls - use both ref and a flag
     if (startQuizAttemptedRef.current) {
+      console.log('[QUIZ PAGE] Initialization already attempted - skipping');
       return;
     }
     
-    if (isGuest && questions && questions.length > 0 && !quizInitialized) {
-      if (hasSavedQuiz()) {
-        console.log('[QUIZ PAGE] Found saved quiz - showing resume modal');
-        setShowResumeModal(true);
-        startQuizAttemptedRef.current = true; // Mark as attempted
-      } else {
-        // No saved quiz - initialize as fresh
-        console.log('[QUIZ PAGE] No saved quiz - starting fresh');
-        setQuizInitialized(true);
-        startQuizAttemptedRef.current = true; // Mark as attempted
+    // Only proceed when questions are loaded
+    if (!questions || questions.length === 0) {
+      console.log('[QUIZ PAGE] Questions not loaded yet - waiting...');
+      return;
+    }
+    
+    // Mark as attempted IMMEDIATELY to prevent re-runs
+    startQuizAttemptedRef.current = true;
+    console.log('[QUIZ PAGE] Starting initialization check...');
+    
+    if (isGuest && !quizInitialized) {
+      // Check for saved quiz (only once)
+      const savedProgress = getSavedQuizProgress();
+      const hasQuiz = hasSavedQuiz();
+      
+      console.log('[QUIZ PAGE] Checking for saved quiz...');
+      console.log('[QUIZ PAGE] hasSavedQuiz():', hasQuiz);
+      console.log('[QUIZ PAGE] savedQuizProgress:', savedProgress);
+      
+      // Debug: Check what's actually in localStorage
+      const savedQuizRaw = localStorage.getItem('guest_quiz');
+      if (savedQuizRaw) {
+        try {
+          const savedData = JSON.parse(savedQuizRaw);
+          const responseKeys = Object.keys(savedData.responses || {});
+          const answeredResponses = responseKeys.filter(key => {
+            const resp = savedData.responses[key];
+            return resp?.student_answer && ['A', 'B', 'C', 'D'].includes(resp.student_answer);
+          });
+          
+          console.log('[QUIZ PAGE] Saved quiz data:', {
+            hasQuestions: !!savedData.questions,
+            questionsCount: savedData.questions?.length || 0,
+            hasResponses: !!savedData.responses,
+            totalResponseKeys: responseKeys.length,
+            answeredResponseKeys: answeredResponses.length,
+            responseKeys: responseKeys,
+            answeredKeys: answeredResponses,
+            responsesSample: answeredResponses.slice(0, 3).reduce((acc, key) => {
+              acc[key] = savedData.responses[key];
+              return acc;
+            }, {} as any),
+          });
+        } catch (e) {
+          console.error('[QUIZ PAGE] Error parsing saved quiz:', e);
+        }
       }
-    } else if (!isGuest && questions && questions.length > 0 && !quizState.quizId && !startQuizAttemptedRef.current) {
+      
+      if (hasQuiz && savedProgress && savedProgress.answeredQuestions > 0) {
+        console.log('[QUIZ PAGE] ✅ Found saved quiz with', savedProgress.answeredQuestions, 'answered questions - showing resume modal');
+        setSavedQuizProgress(savedProgress);
+        setShowResumeModal(true);
+        // Don't set quizInitialized yet - wait for user to choose resume or start fresh
+      } else {
+        // No saved quiz or no answered questions - initialize as fresh
+        if (hasQuiz) {
+          console.log('[QUIZ PAGE] ⚠️ Saved quiz found but no answered questions (answeredQuestions:', savedProgress?.answeredQuestions || 0, ') - starting fresh');
+        } else {
+          console.log('[QUIZ PAGE] ℹ️ No saved quiz - starting fresh');
+        }
+        setSavedQuizProgress(null);
+        setQuizInitialized(true);
+      }
+    } else if (!isGuest && !quizState.quizId) {
       // Authenticated user - start quiz normally (only once)
       console.log('[QUIZ PAGE] Starting quiz for authenticated user');
-      startQuizAttemptedRef.current = true; // Mark as attempted BEFORE calling startQuiz
       startQuiz().catch((error) => {
         console.error('[QUIZ PAGE] Failed to start quiz:', error);
-        // Reset flag on error so user can retry
-        startQuizAttemptedRef.current = false;
+        startQuizAttemptedRef.current = false; // Allow retry on error
       });
       setQuizInitialized(true);
     }
+    // Only depend on questions length - don't include quizInitialized or callbacks
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions, isGuest, quizInitialized, hasSavedQuiz, quizState.quizId]); // startQuiz is stable (useCallback), ref prevents duplicates
+  }, [questions?.length]); // Run only when questions first load
 
   // Handle resume quiz
   const handleResumeQuiz = () => {
@@ -140,9 +198,6 @@ const QuizPage = () => {
       }));
     }
   }, [currentQuestion?.id]);
-
-  // Show resume modal if there's a saved quiz
-  const savedQuizProgress = getSavedQuizProgress();
 
   // Show loading state if questions are still loading
   if (questionsLoading) {
