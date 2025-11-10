@@ -24,13 +24,23 @@ Your Railway backend needs to allow requests from your Vercel frontend.
 #### Option A: Using Environment Variables (Recommended)
 
 1. Go to Railway Dashboard → Your Service → **"Variables"** tab
-2. Add or update `ALLOWED_ORIGINS` environment variable:
+2. Add or update `CORS_ORIGIN` or `ALLOWED_ORIGINS` environment variable:
+
+   **For GitHub Pages:**
    ```
-   https://royal-light-study-gap-ai.vercel.app,https://*.vercel.app
+   https://tessa-777.github.io
    ```
-3. This allows:
-   - Your production Vercel deployment
-   - All Vercel preview deployments
+   
+   **For multiple origins (GitHub Pages + previews):**
+   ```
+   https://tessa-777.github.io,https://*.github.io
+   ```
+
+3. **Important**: 
+   - ✅ CORS origins do NOT include the path (no `/Royal-Light-StudyGapAI/`)
+   - ✅ Use protocol + domain only: `https://tessa-777.github.io`
+   - ❌ Don't include trailing slashes or paths
+   - ✅ Match the exact origin the browser sends
 
 #### Option B: Using Backend Code
 
@@ -55,7 +65,7 @@ In Railway Dashboard → Your Service → **"Variables"** tab, ensure you have:
 
 | Variable | Value | Description |
 |----------|-------|-------------|
-| `ALLOWED_ORIGINS` | `https://royal-light-study-gap-ai.vercel.app,https://*.vercel.app` | CORS allowed origins |
+| `CORS_ORIGIN` or `ALLOWED_ORIGINS` | `https://tessa-777.github.io` | CORS allowed origins (GitHub Pages) |
 | `DATABASE_URL` | `postgresql://...` | Database connection string |
 | `SUPABASE_URL` | `https://xxx.supabase.co` | Supabase project URL |
 | `SUPABASE_KEY` | `eyJ...` | Supabase service role key |

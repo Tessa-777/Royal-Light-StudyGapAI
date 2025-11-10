@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Download, Share2, ChevronRight } from 'lucide-react';
 import Card from '../components/ui/Card';
@@ -10,10 +10,16 @@ import BarChart from '../components/charts/BarChart';
 import SaveResultsBanner from '../components/ui/SaveResultsBanner';
 import { useDiagnostic, type AnalyzeDiagnosticResponse } from '../hooks/useDiagnostic';
 import { isAuthenticatedSync } from '../services/auth';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const DiagnosticResultsPage = () => {
   const { quizId: quizIdFromUrl } = useParams<{ quizId: string }>();
   const navigate = useNavigate();
+  
+  // Hooks must be called at the top level, before any conditional returns
+  const pdfRef = useRef<HTMLDivElement>(null);
+  
   const isGuest = !isAuthenticatedSync();
   
   // For guest users, don't use quizId from URL - use localStorage instead
@@ -225,44 +231,41 @@ const DiagnosticResultsPage = () => {
     );
   }
 
-  // Prepare data for charts with defensive checks
+  // Prepare data for charts with defensive checks - use #1E6223 for topic accuracy
   const topicBarData = (diagnostic.topic_breakdown || []).map((topic: AnalyzeDiagnosticResponse['topic_breakdown'][0]) => ({
     name: topic.topic,
     value: topic.accuracy,
-    color:
-      topic.status === 'strong'
-        ? '#10b981'
-        : topic.status === 'developing'
-        ? '#f59e0b'
-        : '#ef4444',
+    color: '#1E6223', // Use specified green color for topic accuracy
   }));
 
+  // Error distribution with specified colors: #C9A282, #8B78B5, #87C4BC, #5C89AD
+  const errorColors = ['#C9A282', '#8B78B5', '#87C4BC', '#5C89AD'];
   const errorDistribution = diagnostic.root_cause_analysis?.error_distribution
     ? [
         {
           name: 'Conceptual Gap',
           value: diagnostic.root_cause_analysis.error_distribution.conceptual_gap || 0,
-          color: '#ef4444',
+          color: errorColors[0], // #C9A282
         },
         {
           name: 'Procedural Error',
           value: diagnostic.root_cause_analysis.error_distribution.procedural_error || 0,
-          color: '#f59e0b',
+          color: errorColors[1], // #8B78B5
         },
         {
           name: 'Careless Mistake',
           value: diagnostic.root_cause_analysis.error_distribution.careless_mistake || 0,
-          color: '#3b82f6',
+          color: errorColors[2], // #87C4BC
         },
         {
           name: 'Knowledge Gap',
           value: diagnostic.root_cause_analysis.error_distribution.knowledge_gap || 0,
-          color: '#8b5cf6',
+          color: errorColors[3], // #5C89AD
         },
         {
           name: 'Misinterpretation',
           value: diagnostic.root_cause_analysis.error_distribution.misinterpretation || 0,
-          color: '#10b981',
+          color: errorColors[0], // #C9A282 (reuse first color for 5th type)
         },
       ].filter((item) => item.value > 0)
     : [];
@@ -294,18 +297,135 @@ const DiagnosticResultsPage = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Your Diagnostic Report</h1>
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm">
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={async () => {
+                if (!pdfRef.current) return;
+
+                try {
+                  // Show loading indicator
+                  const button = document.activeElement as HTMLElement;
+                  const originalText = button?.textContent;
+                  if (button) {
+                    button.textContent = 'Generating PDF...';
+                    button.setAttribute('disabled', 'true');
+                  }
+
+                  // Capture the content as canvas
+                  const canvas = await html2canvas(pdfRef.current, {
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#f9fafb', // gray-50 background
+                  });
+
+                  // Create PDF
+                  const imgData = canvas.toDataURL('image/png');
+                  const pdf = new jsPDF('p', 'mm', 'a4');
+                  const pdfWidth = pdf.internal.pageSize.getWidth();
+                  const pdfHeight = pdf.internal.pageSize.getHeight();
+                  const imgWidth = canvas.width;
+                  const imgHeight = canvas.height;
+                  const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+                  const imgX = (pdfWidth - imgWidth * ratio) / 2;
+                  const imgY = 0;
+
+                  // Calculate how many pages we need
+                  const pageHeight = imgHeight * ratio;
+                  let heightLeft = pageHeight;
+                  let position = 0;
+
+                  // Add first page
+                  pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+                  heightLeft -= pdfHeight;
+
+                  // Add additional pages if needed
+                  while (heightLeft > 0) {
+                    position = heightLeft - pageHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', imgX, position, imgWidth * ratio, imgHeight * ratio);
+                    heightLeft -= pdfHeight;
+                  }
+
+                  // Download PDF
+                  const fileName = `diagnostic-report-${diagnostic.id || 'report'}-${new Date().toISOString().split('T')[0]}.pdf`;
+                  pdf.save(fileName);
+
+                  // Restore button
+                  if (button) {
+                    button.textContent = originalText || 'Download PDF';
+                    button.removeAttribute('disabled');
+                  }
+                } catch (error) {
+                  console.error('Error generating PDF:', error);
+                  alert('Failed to generate PDF. Please try again.');
+                  // Restore button
+                  const button = document.activeElement as HTMLElement;
+                  if (button) {
+                    button.textContent = 'Download PDF';
+                    button.removeAttribute('disabled');
+                  }
+                }
+              }}
+            >
               <Download className="h-4 w-4 mr-2" />
-              Download
+              Download PDF
             </Button>
-            <Button variant="secondary" size="sm">
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={async () => {
+                // Share diagnostic report
+                const performance = diagnostic.overall_performance || {
+                  accuracy: 0,
+                  total_questions: 0,
+                  correct_answers: 0,
+                };
+                const shareData = {
+                  title: 'My Diagnostic Report - StudyGapAI',
+                  text: `Check out my diagnostic results!\n\nAccuracy: ${performance.accuracy.toFixed(0)}%\nTotal Questions: ${performance.total_questions}\nCorrect Answers: ${performance.correct_answers}`,
+                  url: window.location.href,
+                };
+
+                try {
+                  if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+                    await navigator.share(shareData);
+                  } else {
+                    // Fallback: Copy to clipboard
+                    await navigator.clipboard.writeText(window.location.href);
+                    alert('Link copied to clipboard!');
+                  }
+                } catch (error) {
+                  // User cancelled or error occurred
+                  if ((error as Error).name !== 'AbortError') {
+                    // Fallback: Copy to clipboard
+                    try {
+                      await navigator.clipboard.writeText(window.location.href);
+                      alert('Link copied to clipboard!');
+                    } catch (clipboardError) {
+                      console.error('Failed to copy to clipboard:', clipboardError);
+                      alert('Failed to share. Please copy the URL manually.');
+                    }
+                  }
+                }
+              }}
+            >
               <Share2 className="h-4 w-4 mr-2" />
               Share
             </Button>
           </div>
         </div>
 
-        {/* Overall Performance Card */}
+        {/* PDF Content - This is what will be captured for PDF */}
+        <div ref={pdfRef} className="bg-white p-6 rounded-lg shadow-sm">
+          {/* Report Title for PDF */}
+          <div className="mb-8 pb-4 border-b border-gray-200">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Your Diagnostic Report</h1>
+            <p className="text-sm text-gray-500">Generated on {new Date().toLocaleDateString()}</p>
+          </div>
+
+          {/* Overall Performance Card */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="md:col-span-2">
             <Card.Body>
@@ -598,6 +718,8 @@ const DiagnosticResultsPage = () => {
             </div>
           </Card.Body>
         </Card>
+        </div>
+        {/* End of PDF Content */}
       </div>
     </div>
   );

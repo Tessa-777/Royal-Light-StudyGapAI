@@ -31,7 +31,7 @@ export const endpoints = {
 
   // Quiz Management
   quiz: {
-    questions: (total: number = 30) => `${API_BASE_URL}/quiz/questions?total=${total}`,
+    questions: (total: number = 15) => `${API_BASE_URL}/quiz/questions?total=${total}`,
     start: `${API_BASE_URL}/quiz/start`,
     submit: (quizId: string) => `${API_BASE_URL}/quiz/${quizId}/submit`,
     results: (quizId: string) => `${API_BASE_URL}/quiz/${quizId}/results`,

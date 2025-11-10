@@ -46,7 +46,7 @@ export interface QuizState {
 /**
  * Fetch quiz questions
  */
-export const useQuizQuestions = (total: number = 30) => {
+export const useQuizQuestions = (total: number = 15) => {
   return useQuery({
     queryKey: ['questions', total],
     queryFn: async () => {
@@ -84,7 +84,7 @@ export const useQuizQuestions = (total: number = 30) => {
  */
 export const useStartQuiz = () => {
   return useMutation({
-    mutationFn: async (totalQuestions: number = 30) => {
+    mutationFn: async (totalQuestions: number = 15) => {
       const response = await api.post(endpoints.quiz.start, {
         totalQuestions,
       });
@@ -114,7 +114,7 @@ export const useSubmitQuiz = () => {
 /**
  * Custom hook for quiz management
  */
-export const useQuiz = (totalQuestions: number = 30) => {
+export const useQuiz = (totalQuestions: number = 15) => {
   const [quizState, setQuizState] = useState<QuizState>({
     questions: [],
     currentQuestionIndex: 0,

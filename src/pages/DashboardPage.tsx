@@ -209,8 +209,8 @@ const DashboardPage = () => {
             <Card>
               <Card.Body>
                 <div className="flex items-center">
-                  <div className="bg-purple-100 p-3 rounded-full mr-4">
-                    <BookOpen className="h-6 w-6 text-purple-600" />
+                  <div className="bg-blue-100 p-3 rounded-full mr-4">
+                    <BookOpen className="h-6 w-6 text-blue-600" />
                   </div>
                   <div className="flex-1">
                     <div className="text-sm text-gray-500">Study Plan</div>
@@ -368,44 +368,6 @@ const DashboardPage = () => {
           )}
         </div>
 
-        {/* Performance Metrics - Only show if we have diagnostic data with projected score */}
-        {diagnosticData && hasProjectedScore && (
-          <Card className="mb-8">
-            <Card.Header>
-              <h2 className="text-xl font-semibold text-gray-900">Performance</h2>
-            </Card.Header>
-            <Card.Body>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <div className="text-sm text-gray-500 mb-2">Projected JAMB Score</div>
-                  <div className="text-3xl font-bold text-gray-900 mb-1">
-                    {projectedScore}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    {diagnosticData.predicted_jamb_score?.confidence_interval && (
-                      <span>±{diagnosticData.predicted_jamb_score.confidence_interval}</span>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-500 mb-2">Target Score</div>
-                  <div className="text-3xl font-bold text-blue-600 mb-1">
-                    {targetScore}
-                  </div>
-                  {pointsNeeded > 0 ? (
-                    <div className="text-sm text-red-600">
-                      {pointsNeeded} points needed to reach goal
-                    </div>
-                  ) : (
-                    <div className="text-sm text-green-600">
-                      Goal achieved! 🎉
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card.Body>
-          </Card>
-        )}
 
         {/* Strong & Weak Topics */}
         {(strongTopics.length > 0 || weakTopics.length > 0) && (

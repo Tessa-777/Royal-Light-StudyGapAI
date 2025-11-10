@@ -31,6 +31,9 @@ dist-ssr
 # Vercel
 .vercel
 
+# GitHub Pages
+.gh-pages
+
 # Build outputs
 build
 *.tsbuildinfo

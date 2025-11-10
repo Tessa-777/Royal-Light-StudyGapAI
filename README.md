@@ -98,15 +98,14 @@ src/
 
 ## 🚀 Deployment
 
-### Vercel Deployment
+### GitHub Pages Deployment
 
-1. Connect GitHub repository to Vercel
-2. Set build command: `npm run build`
-3. Set output directory: `dist`
-4. Add environment variables:
-   - `VITE_API_BASE_URL`
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
+1. Set environment variables in `.env.production` or GitHub Secrets
+2. Deploy: `npm run deploy`
+3. Enable GitHub Pages in repository settings
+4. Your app will be live at: `https://Tessa-777.github.io/Royal-Light-StudyGapAI`
+
+See [GitHub Pages Deployment Guide](./docs/GITHUB_PAGES_DEPLOYMENT.md) for detailed instructions.
 
 ## 📝 API Integration
 
@@ -136,8 +135,9 @@ All project documentation is organized in the [`docs/`](./docs/) folder:
 - **[Project Summary](./docs/PROJECT_SUMMARY.md)** - Complete project overview and current state
 - **[Implementation Summary](./docs/IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
 - **[Quick Start Guide](./docs/QUICK_START.md)** - Developer quick start
-- **[Deployment Guide](./docs/DEPLOYMENT_GUIDE.md)** - Deploy to Vercel (frontend) and Render (backend)
-- **[Vercel Deployment Guide](./docs/VERCEL_DEPLOYMENT_GUIDE.md)** - Complete Vercel deployment guide
+- **[GitHub Pages Deployment Guide](./docs/GITHUB_PAGES_DEPLOYMENT.md)** - Complete GitHub Pages deployment guide
+- **[Railway Backend Setup](./docs/RAILWAY_BACKEND_SETUP.md)** - Railway backend configuration
+- **[GitHub Pages Quick Steps](./GITHUB_PAGES_DEPLOYMENT_STEPS.md)** - Quick deployment steps
 - **[Troubleshooting Guide](./docs/TROUBLESHOOTING_GUIDE.md)** - Common issues and solutions
 
 ### Frontend-Specific Docs

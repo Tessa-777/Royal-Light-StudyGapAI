@@ -69,9 +69,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 export function App() {
+  // Get base path from Vite config (for GitHub Pages)
+  // In production, this will be /Royal-Light-StudyGapAI/
+  // In development, this will be /
+  const base = import.meta.env.BASE_URL || '/';
+  
   return (
     <QueryClientProvider client={queryClient}>
-      <Router>
+      <Router basename={base}>
         <ScrollToTop />
         <AppRedirect />
         <div className="flex flex-col min-h-screen bg-gray-50">

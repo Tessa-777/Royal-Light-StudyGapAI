@@ -41,7 +41,7 @@ const QuizPage = () => {
     getSavedQuizProgress,
     loadSavedQuiz,
     clearSavedQuiz,
-  } = useQuiz(5); // Reduced to 5 questions for testing
+  } = useQuiz(15); // 15 questions for diagnostic quiz
 
   console.log('[QUIZ PAGE] Questions loading:', questionsLoading);
   console.log('[QUIZ PAGE] Questions error:', questionsError);

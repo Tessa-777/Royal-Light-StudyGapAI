@@ -7,9 +7,9 @@ This folder contains all project documentation, issue analyses, and technical gu
 - **[PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md)** - Complete project overview, architecture, and current state
 - **[IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)** - Implementation details and technical decisions
 - **[QUICK_START.md](./QUICK_START.md)** - Quick start guide for developers
-- **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** - Complete deployment guide for Vercel (frontend) and Render (backend)
-- **[VERCEL_DEPLOYMENT_GUIDE.md](./VERCEL_DEPLOYMENT_GUIDE.md)** - Complete Vercel deployment guide (frontend)
-- **[DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)** - Quick deployment checklist and reference
+- **[GITHUB_PAGES_DEPLOYMENT.md](./GITHUB_PAGES_DEPLOYMENT.md)** - Complete GitHub Pages deployment guide
+- **[RAILWAY_BACKEND_SETUP.md](./RAILWAY_BACKEND_SETUP.md)** - Railway backend configuration and CORS setup
+- **[GITHUB_PAGES_DEPLOYMENT_STEPS.md](../GITHUB_PAGES_DEPLOYMENT_STEPS.md)** - Quick deployment steps
 
 ## 🐛 Issue Analysis & Fixes
 
