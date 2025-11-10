@@ -81,47 +81,58 @@ const QuizPage = () => {
     };
   }, [currentQuestion?.id]);
 
-  // Check for saved quiz on mount (guest mode only)
+  // Check for saved quiz on mount (guest mode only) - RUN ONLY ONCE
   useEffect(() => {
-    // Prevent multiple calls - only run once
+    // Prevent multiple calls - use both ref and a flag
     if (startQuizAttemptedRef.current) {
+      console.log('[QUIZ PAGE] Initialization already attempted - skipping');
       return;
     }
     
-    if (isGuest && questions && questions.length > 0 && !quizInitialized) {
-      if (hasSavedQuiz()) {
-        const progress = getSavedQuizProgress();
-        // Don't show modal if progress is only 1 question or less - start fresh instead
-        if (!progress || progress.answeredQuestions <= 1) {
-          console.log('[QUIZ PAGE] Found saved quiz with minimal progress (1 or less) - starting fresh');
-          clearSavedQuiz();
-          setShowResumeModal(false); // Explicitly set to false
-          setQuizInitialized(true);
-          startQuizAttemptedRef.current = true; // Mark as attempted
-        } else {
-          console.log('[QUIZ PAGE] Found saved quiz - showing resume modal');
-          setShowResumeModal(true);
-          startQuizAttemptedRef.current = true; // Mark as attempted
-        }
+    // Only proceed when questions are loaded
+    if (!questions || questions.length === 0) {
+      console.log('[QUIZ PAGE] Questions not loaded yet - waiting...');
+      return;
+    }
+    
+    // Mark as attempted IMMEDIATELY to prevent re-runs
+    startQuizAttemptedRef.current = true;
+    console.log('[QUIZ PAGE] Starting initialization check...');
+    
+    if (isGuest && !quizInitialized) {
+      // Check for saved quiz (only once)
+      const savedProgress = getSavedQuizProgress();
+      const hasQuiz = hasSavedQuiz();
+      
+      console.log('[QUIZ PAGE] Checking for saved quiz...');
+      console.log('[QUIZ PAGE] hasSavedQuiz():', hasQuiz);
+      console.log('[QUIZ PAGE] savedQuizProgress:', savedProgress);
+      
+      if (hasQuiz && savedProgress && savedProgress.answeredQuestions > 0) {
+        console.log('[QUIZ PAGE] ✅ Found saved quiz with', savedProgress.answeredQuestions, 'answered questions - showing resume modal');
+        setShowResumeModal(true);
+        // Don't set quizInitialized yet - wait for user to choose resume or start fresh
       } else {
-        // No saved quiz - initialize as fresh
-        console.log('[QUIZ PAGE] No saved quiz - starting fresh');
+        // No saved quiz or no answered questions - initialize as fresh
+        if (hasQuiz) {
+          console.log('[QUIZ PAGE] ⚠️ Saved quiz found but no answered questions (answeredQuestions:', savedProgress?.answeredQuestions || 0, ') - starting fresh');
+        } else {
+          console.log('[QUIZ PAGE] ℹ️ No saved quiz - starting fresh');
+        }
         setQuizInitialized(true);
-        startQuizAttemptedRef.current = true; // Mark as attempted
       }
-    } else if (!isGuest && questions && questions.length > 0 && !quizState.quizId && !startQuizAttemptedRef.current) {
+    } else if (!isGuest && !quizState.quizId) {
       // Authenticated user - start quiz normally (only once)
       console.log('[QUIZ PAGE] Starting quiz for authenticated user');
-      startQuizAttemptedRef.current = true; // Mark as attempted BEFORE calling startQuiz
       startQuiz().catch((error) => {
         console.error('[QUIZ PAGE] Failed to start quiz:', error);
-        // Reset flag on error so user can retry
-        startQuizAttemptedRef.current = false;
+        startQuizAttemptedRef.current = false; // Allow retry on error
       });
       setQuizInitialized(true);
     }
+    // Only depend on questions length - don't include quizInitialized or callbacks
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions, isGuest, quizInitialized, hasSavedQuiz, quizState.quizId]); // startQuiz is stable (useCallback), ref prevents duplicates
+  }, [questions?.length]); // Run only when questions first load
 
   // Handle resume quiz
   const handleResumeQuiz = () => {
@@ -151,8 +162,8 @@ const QuizPage = () => {
     }
   }, [currentQuestion?.id]);
 
-  // Show resume modal if there's a saved quiz
-  const savedQuizProgress = getSavedQuizProgress();
+  // Get saved quiz progress (only when modal is shown, to avoid calling on every render)
+  const savedQuizProgress = showResumeModal ? getSavedQuizProgress() : null;
 
   // Show loading state if questions are still loading
   if (questionsLoading) {
@@ -168,8 +179,7 @@ const QuizPage = () => {
   }
 
   // Show resume modal if there's a saved quiz and quiz hasn't been initialized yet
-  // BUT NOT if progress is only 1 question or less
-  if (showResumeModal && savedQuizProgress && savedQuizProgress.answeredQuestions > 1) {
+  if (showResumeModal && savedQuizProgress) {
     return (
       <>
         <ResumeQuizModal
