@@ -10,7 +10,7 @@
 This is the official frontend for **StudyGapAI**, an AI-powered diagnostic tool that identifies the hidden, foundational knowledge gaps holding Nigerian JAMB students back. Built with React, Vite, and TailwindCSS.
 
 **➡️ Live App:** [https://Tessa-777.github.io/Royal-Light-StudyGapAI](https://Tessa-777.github.io/Royal-Light-StudyGapAI)  
-**➡️ Backend Repository:** [[Link to your Backend GitHub Repo]](https://github.com/Tessa-777/Royal-Light-StudyGapAI-Backend.git)
+**➡️ Backend Repository:** [Link to Backend GitHub Repo](https://github.com/Tessa-777/Royal-Light-StudyGapAI-Backend.git)
 
 ---
 
