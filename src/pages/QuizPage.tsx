@@ -95,59 +95,21 @@ const QuizPage = () => {
       return;
     }
     
-    // Only proceed when questions are loaded
-    if (!questions || questions.length === 0) {
-      console.log('[QUIZ PAGE] Questions not loaded yet - waiting...');
-      return;
-    }
-    
-    // Mark as attempted IMMEDIATELY to prevent re-runs
-    startQuizAttemptedRef.current = true;
-    console.log('[QUIZ PAGE] Starting initialization check...');
-    
-    if (isGuest && !quizInitialized) {
-      // Check for saved quiz (only once)
-      const savedProgress = getSavedQuizProgress();
-      const hasQuiz = hasSavedQuiz();
-      
-      console.log('[QUIZ PAGE] Checking for saved quiz...');
-      console.log('[QUIZ PAGE] hasSavedQuiz():', hasQuiz);
-      console.log('[QUIZ PAGE] savedQuizProgress:', savedProgress);
-      
-      // Debug: Check what's actually in localStorage
-      const savedQuizRaw = localStorage.getItem('guest_quiz');
-      if (savedQuizRaw) {
-        try {
-          const savedData = JSON.parse(savedQuizRaw);
-          const responseKeys = Object.keys(savedData.responses || {});
-          const answeredResponses = responseKeys.filter(key => {
-            const resp = savedData.responses[key];
-            return resp?.student_answer && ['A', 'B', 'C', 'D'].includes(resp.student_answer);
-          });
-          
-          console.log('[QUIZ PAGE] Saved quiz data:', {
-            hasQuestions: !!savedData.questions,
-            questionsCount: savedData.questions?.length || 0,
-            hasResponses: !!savedData.responses,
-            totalResponseKeys: responseKeys.length,
-            answeredResponseKeys: answeredResponses.length,
-            responseKeys: responseKeys,
-            answeredKeys: answeredResponses,
-            responsesSample: answeredResponses.slice(0, 3).reduce((acc, key) => {
-              acc[key] = savedData.responses[key];
-              return acc;
-            }, {} as any),
-          });
-        } catch (e) {
-          console.error('[QUIZ PAGE] Error parsing saved quiz:', e);
+    if (isGuest && questions && questions.length > 0 && !quizInitialized) {
+      if (hasSavedQuiz()) {
+        const progress = getSavedQuizProgress();
+        // Don't show modal if progress is only 1 question or less - start fresh instead
+        if (!progress || progress.answeredQuestions <= 1) {
+          console.log('[QUIZ PAGE] Found saved quiz with minimal progress (1 or less) - starting fresh');
+          clearSavedQuiz();
+          setShowResumeModal(false); // Explicitly set to false
+          setQuizInitialized(true);
+          startQuizAttemptedRef.current = true; // Mark as attempted
+        } else {
+          console.log('[QUIZ PAGE] Found saved quiz - showing resume modal');
+          setShowResumeModal(true);
+          startQuizAttemptedRef.current = true; // Mark as attempted
         }
-      }
-      
-      if (hasQuiz && savedProgress && savedProgress.answeredQuestions > 0) {
-        console.log('[QUIZ PAGE] ✅ Found saved quiz with', savedProgress.answeredQuestions, 'answered questions - showing resume modal');
-        setSavedQuizProgress(savedProgress);
-        setShowResumeModal(true);
-        // Don't set quizInitialized yet - wait for user to choose resume or start fresh
       } else {
         // No saved quiz or no answered questions - initialize as fresh
         if (hasQuiz) {
@@ -213,7 +175,8 @@ const QuizPage = () => {
   }
 
   // Show resume modal if there's a saved quiz and quiz hasn't been initialized yet
-  if (showResumeModal && savedQuizProgress) {
+  // BUT NOT if progress is only 1 question or less
+  if (showResumeModal && savedQuizProgress && savedQuizProgress.answeredQuestions > 1) {
     return (
       <>
         <ResumeQuizModal

@@ -11,7 +11,14 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase environment variables');
+  console.error('❌ Missing Supabase environment variables');
+  console.error('VITE_SUPABASE_URL:', supabaseUrl ? '✅ Set' : '❌ Missing');
+  console.error('VITE_SUPABASE_ANON_KEY:', supabaseKey ? '✅ Set' : '❌ Missing');
+  console.error('');
+  console.error('For GitHub Pages deployment:');
+  console.error('1. Go to GitHub Repository → Settings → Secrets and variables → Actions');
+  console.error('2. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY as secrets');
+  console.error('3. The workflow will use these secrets during build');
 }
 
 export const supabase: SupabaseClient | null = supabaseUrl && supabaseKey
