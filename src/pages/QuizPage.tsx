@@ -90,9 +90,18 @@ const QuizPage = () => {
     
     if (isGuest && questions && questions.length > 0 && !quizInitialized) {
       if (hasSavedQuiz()) {
-        console.log('[QUIZ PAGE] Found saved quiz - showing resume modal');
-        setShowResumeModal(true);
-        startQuizAttemptedRef.current = true; // Mark as attempted
+        const progress = getSavedQuizProgress();
+        // Don't show modal if progress is only 1 question - start fresh instead
+        if (progress && progress.answeredQuestions <= 1) {
+          console.log('[QUIZ PAGE] Found saved quiz with minimal progress (1 or less) - starting fresh');
+          clearSavedQuiz();
+          setQuizInitialized(true);
+          startQuizAttemptedRef.current = true; // Mark as attempted
+        } else {
+          console.log('[QUIZ PAGE] Found saved quiz - showing resume modal');
+          setShowResumeModal(true);
+          startQuizAttemptedRef.current = true; // Mark as attempted
+        }
       } else {
         // No saved quiz - initialize as fresh
         console.log('[QUIZ PAGE] No saved quiz - starting fresh');
