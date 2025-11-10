@@ -100,10 +100,12 @@ src/
 
 ### GitHub Pages Deployment
 
-1. Set environment variables in `.env.production` or GitHub Secrets
-2. Deploy: `npm run deploy`
-3. Enable GitHub Pages in repository settings
+1. **Set GitHub Secrets** (Required): See [GitHub Pages Secrets Setup](./docs/GITHUB_PAGES_SECRETS_SETUP.md)
+2. Deploy: The GitHub Actions workflow will automatically deploy on push to `main`
+3. Enable GitHub Pages in repository settings (if not already enabled)
 4. Your app will be live at: `https://Tessa-777.github.io/Royal-Light-StudyGapAI`
+
+**Important:** If you see "Invalid API key" errors, you need to set GitHub Secrets. See the [Secrets Setup Guide](./docs/GITHUB_PAGES_SECRETS_SETUP.md).
 
 See [GitHub Pages Deployment Guide](./docs/GITHUB_PAGES_DEPLOYMENT.md) for detailed instructions.
 
