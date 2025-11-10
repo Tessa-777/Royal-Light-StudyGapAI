@@ -21,12 +21,19 @@ const ResumeQuizModal = ({
   onStartFresh,
   quizProgress
 }: ResumeQuizModalProps) => {
+  // CRITICAL SAFETY: Never show modal if answeredQuestions is 0 or invalid
   if (!isOpen) return null;
+  if (!quizProgress || quizProgress.answeredQuestions === 0) {
+    console.error('[ResumeQuizModal] ⚠️ SAFETY: Modal received invalid progress - not rendering');
+    return null;
+  }
 
   const formatDate = (timestamp?: string) => {
     if (!timestamp) return '';
     try {
       const date = new Date(timestamp);
+      // Validate date is not invalid
+      if (isNaN(date.getTime())) return '';
       return date.toLocaleString();
     } catch {
       return '';

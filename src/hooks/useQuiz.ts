@@ -3,7 +3,7 @@
  * Manages quiz state, questions, and responses
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../services/api';
 import endpoints from '../services/endpoints';
@@ -143,20 +143,65 @@ export const useQuiz = (totalQuestions: number = 15) => {
     }
   }, [questions]);
 
+  // Calculate answered count (memoized to avoid recalculating on every render)
+  const answeredCount = useMemo(() => {
+    return Object.keys(quizState.responses).filter(
+      (questionId) => {
+        const response = quizState.responses[questionId];
+        return response?.student_answer && 
+               typeof response.student_answer === 'string' &&
+               ['A', 'B', 'C', 'D'].includes(response.student_answer.trim().toUpperCase());
+      }
+    ).length;
+  }, [quizState.responses]);
+
   // Auto-save quiz data for guest users
+  // CRITICAL: Only save when answeredCount > 0, preserve timestamp forever
   useEffect(() => {
-    if (!isAuthenticatedSync() && quizState.questions.length > 0) {
+    // Skip if authenticated or no questions loaded
+    if (isAuthenticatedSync() || quizState.questions.length === 0) {
+      return;
+    }
+    
+    // Get existing quiz data FIRST to preserve original timestamp
+    const existingQuiz = localStorage.getItem('guest_quiz');
+    let originalTimestamp: string | undefined;
+    let originalStartTime: number | undefined;
+    
+    if (existingQuiz) {
+      try {
+        const existingData = JSON.parse(existingQuiz);
+        // CRITICAL: Always preserve original timestamp and startTime if they exist
+        originalTimestamp = existingData.timestamp;
+        originalStartTime = existingData.startTime;
+      } catch {
+        // If parsing fails, existing data is corrupted - will create new
+      }
+    }
+    
+    // CRITICAL: Only auto-save if there is at least 1 valid answered question
+    // NEVER save if answeredCount === 0 (this prevents creating invalid quiz data)
+    if (answeredCount > 0) {
       const quizData = {
         questions: quizState.questions,
         currentQuestionIndex: quizState.currentQuestionIndex,
         responses: quizState.responses,
         timeSpent: quizState.timeSpent,
-        startTime: quizState.startTime,
-        timestamp: new Date().toISOString(),
+        // CRITICAL: Preserve original values if they exist, never overwrite with new timestamp
+        startTime: originalStartTime !== undefined ? originalStartTime : quizState.startTime,
+        timestamp: originalTimestamp !== undefined ? originalTimestamp : new Date().toISOString(),
       };
+      
       localStorage.setItem('guest_quiz', JSON.stringify(quizData));
+    } else {
+      // answeredCount === 0 - clear any existing invalid quiz data
+      if (existingQuiz) {
+        console.log('[useQuiz] answeredCount is 0 - clearing invalid quiz data');
+        localStorage.removeItem('guest_quiz');
+      }
     }
-  }, [quizState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answeredCount, quizState.questions.length, quizState.currentQuestionIndex, JSON.stringify(quizState.responses), JSON.stringify(quizState.timeSpent)]);
 
   const startQuiz = useCallback(async () => {
     if (isAuthenticatedSync()) {
@@ -211,37 +256,76 @@ export const useQuiz = (totalQuestions: number = 15) => {
     }));
   }, []);
 
-  // Check if there's a saved guest quiz
+  // Check if there's a saved guest quiz with VALID answered questions
+  // ONLY returns true if there is at least 1 answered question
   const hasSavedQuiz = useCallback((): boolean => {
     if (isAuthenticatedSync()) return false;
     const savedQuiz = localStorage.getItem('guest_quiz');
     if (!savedQuiz) return false;
+    
     try {
       const data = JSON.parse(savedQuiz);
-      return !!(data.questions && data.currentQuestionIndex !== undefined);
+      // Must have questions and currentQuestionIndex
+      if (!data.questions || data.currentQuestionIndex === undefined) return false;
+      
+      // Count ONLY valid answered questions (must have student_answer that is A, B, C, or D)
+      const answeredCount = Object.keys(data.responses || {}).filter(
+        (questionId) => {
+          const response = data.responses[questionId];
+          return response?.student_answer && 
+                 typeof response.student_answer === 'string' &&
+                 ['A', 'B', 'C', 'D'].includes(response.student_answer.trim().toUpperCase());
+        }
+      ).length;
+      
+      // ONLY return true if there is at least 1 valid answered question
+      return answeredCount > 0;
     } catch {
       return false;
     }
   }, []);
 
   // Get saved quiz progress info
+  // ONLY returns progress if there is at least 1 valid answered question
+  // Returns null if answeredQuestions === 0
   const getSavedQuizProgress = useCallback(() => {
     if (isAuthenticatedSync()) return null;
     const savedQuiz = localStorage.getItem('guest_quiz');
     if (!savedQuiz) return null;
+    
     try {
       const data = JSON.parse(savedQuiz);
       if (!data.questions || data.currentQuestionIndex === undefined) return null;
       
-      const answeredCount = Object.keys(data.responses || {}).length;
+      const totalQuestions = data.questions.length || 0;
+      const responses = data.responses || {};
       
+      // Count ONLY valid answered questions (must have student_answer that is A, B, C, or D)
+      const answeredCount = Object.keys(responses).filter(
+        (questionId) => {
+          const response = responses[questionId];
+          return response?.student_answer && 
+                 typeof response.student_answer === 'string' &&
+                 ['A', 'B', 'C', 'D'].includes(response.student_answer.trim().toUpperCase());
+        }
+      ).length;
+      
+      // CRITICAL: Only return progress if there is at least 1 valid answered question
+      // If answeredCount === 0, return null (no valid quiz to resume)
+      if (answeredCount === 0) {
+        console.log('[useQuiz] getSavedQuizProgress: No valid answered questions - returning null');
+        return null;
+      }
+      
+      // Return progress with preserved timestamp
       return {
         currentQuestion: data.currentQuestionIndex || 0,
-        totalQuestions: data.questions.length || 0,
+        totalQuestions,
         answeredQuestions: answeredCount,
-        timestamp: data.timestamp,
+        timestamp: data.timestamp || new Date().toISOString(), // Use saved timestamp
       };
-    } catch {
+    } catch (error) {
+      console.error('[useQuiz] getSavedQuizProgress: Error parsing saved quiz:', error);
       return null;
     }
   }, []);
