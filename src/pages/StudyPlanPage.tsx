@@ -57,7 +57,9 @@ const StudyPlanPage = () => {
                   <h2 className="text-xl font-semibold text-gray-900">
                     Week {week.week}: {week.focus}
                   </h2>
-                  <Badge variant="developing">{week.study_hours} hours</Badge>
+                  <Badge variant="developing" className="whitespace-nowrap">
+                    {week.study_hours} hours
+                  </Badge>
                 </div>
               </Card.Header>
               <Card.Body>

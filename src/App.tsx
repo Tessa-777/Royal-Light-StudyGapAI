@@ -63,7 +63,7 @@ const queryClient = new QueryClient({
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   if (!isAuthenticatedSync()) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />; // Redirect to home page instead of login
   }
   return <>{children}</>;
 };

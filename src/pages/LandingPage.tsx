@@ -48,8 +48,8 @@ const LandingPage = () => {
             </div>
             <div className="md:w-1/2">
               <img
-                src="https://images.unsplash.com/photo-1523580494863-6f3031224c94?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80"
-                alt="Students studying with technology"
+                src={`${import.meta.env.BASE_URL}homepage pic.jpeg`}
+                alt="Empty classroom with desks and chairs"
                 className="rounded-lg shadow-xl w-full"
               />
             </div>

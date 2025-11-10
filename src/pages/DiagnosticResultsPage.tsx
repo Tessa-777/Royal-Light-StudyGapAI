@@ -1,10 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Download, Share2, ChevronRight } from 'lucide-react';
+import { Download, ChevronRight } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
-import ProgressBar from '../components/ui/ProgressBar';
 import PieChart from '../components/charts/PieChart';
 import BarChart from '../components/charts/BarChart';
 import SaveResultsBanner from '../components/ui/SaveResultsBanner';
@@ -231,11 +230,11 @@ const DiagnosticResultsPage = () => {
     );
   }
 
-  // Prepare data for charts with defensive checks - use #1E6223 for topic accuracy
+  // Prepare data for charts with defensive checks - use #001B2E for topic accuracy
   const topicBarData = (diagnostic.topic_breakdown || []).map((topic: AnalyzeDiagnosticResponse['topic_breakdown'][0]) => ({
     name: topic.topic,
     value: topic.accuracy,
-    color: '#1E6223', // Use specified green color for topic accuracy
+    color: '#001B2E', // Use specified dark blue color for topic accuracy
   }));
 
   // Error distribution with specified colors: #C9A282, #8B78B5, #87C4BC, #5C89AD
@@ -372,48 +371,6 @@ const DiagnosticResultsPage = () => {
               <Download className="h-4 w-4 mr-2" />
               Download PDF
             </Button>
-            <Button 
-              variant="secondary" 
-              size="sm"
-              onClick={async () => {
-                // Share diagnostic report
-                const performance = diagnostic.overall_performance || {
-                  accuracy: 0,
-                  total_questions: 0,
-                  correct_answers: 0,
-                };
-                const shareData = {
-                  title: 'My Diagnostic Report - StudyGapAI',
-                  text: `Check out my diagnostic results!\n\nAccuracy: ${performance.accuracy.toFixed(0)}%\nTotal Questions: ${performance.total_questions}\nCorrect Answers: ${performance.correct_answers}`,
-                  url: window.location.href,
-                };
-
-                try {
-                  if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-                    await navigator.share(shareData);
-                  } else {
-                    // Fallback: Copy to clipboard
-                    await navigator.clipboard.writeText(window.location.href);
-                    alert('Link copied to clipboard!');
-                  }
-                } catch (error) {
-                  // User cancelled or error occurred
-                  if ((error as Error).name !== 'AbortError') {
-                    // Fallback: Copy to clipboard
-                    try {
-                      await navigator.clipboard.writeText(window.location.href);
-                      alert('Link copied to clipboard!');
-                    } catch (clipboardError) {
-                      console.error('Failed to copy to clipboard:', clipboardError);
-                      alert('Failed to share. Please copy the URL manually.');
-                    }
-                  }
-                }
-              }}
-            >
-              <Share2 className="h-4 w-4 mr-2" />
-              Share
-            </Button>
           </div>
         </div>
 
@@ -424,6 +381,22 @@ const DiagnosticResultsPage = () => {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Your Diagnostic Report</h1>
             <p className="text-sm text-gray-500">Generated on {new Date().toLocaleDateString()}</p>
           </div>
+
+          {/* Diagnostic Summary Section - Only show if summary exists */}
+          {diagnostic.analysis_summary && (
+            <Card className="mb-8">
+              <Card.Header>
+                <h2 className="text-xl font-semibold text-gray-900">Diagnostic Summary</h2>
+              </Card.Header>
+              <Card.Body>
+                <div className="prose prose-sm max-w-none">
+                  <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                    {diagnostic.analysis_summary}
+                  </p>
+                </div>
+              </Card.Body>
+            </Card>
+          )}
 
           {/* Overall Performance Card */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -472,18 +445,18 @@ const DiagnosticResultsPage = () => {
           {/* JAMB Score Projection Card */}
           {diagnostic.predicted_jamb_score && (
             <Card>
-              <Card.Body>
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  JAMB Score Projection
-                </h2>
-                <div className="flex flex-col items-center justify-center h-full">
+              <Card.Body className="flex items-center justify-center min-h-[300px]">
+                <div className="flex flex-col items-center justify-center w-full">
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4 text-center">
+                    JAMB Score Projection
+                  </h2>
                   <div className="text-5xl font-bold text-blue-600 mb-2">
                     {diagnostic.predicted_jamb_score.score || 0}
                   </div>
-                  <div className="text-sm text-gray-500 mb-4">
+                  <div className="text-sm text-gray-500 mb-4 text-center">
                     {diagnostic.predicted_jamb_score.confidence_interval || 'N/A'}
                   </div>
-                  <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-medium">
+                  <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-medium text-center">
                     Based on your diagnostic performance
                   </div>
                 </div>
@@ -513,9 +486,6 @@ const DiagnosticResultsPage = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Questions
-                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -527,27 +497,10 @@ const DiagnosticResultsPage = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {topic.accuracy.toFixed(0)}%
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      <div className="flex items-center gap-3">
-                        <div className="w-32 flex-shrink-0">
-                          <ProgressBar
-                            progress={topic.fluency_index ?? 0}
-                            size="sm"
-                            color={
-                              topic.status === 'strong'
-                                ? 'green'
-                                : topic.status === 'developing'
-                                ? 'yellow'
-                                : 'red'
-                            }
-                          />
-                        </div>
-                        <span className="text-xs font-medium text-gray-600 whitespace-nowrap">
-                          {topic.fluency_index !== undefined && topic.fluency_index !== null
-                            ? `${topic.fluency_index.toFixed(0)}%`
-                            : 'N/A'}
-                        </span>
-                      </div>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {topic.fluency_index !== undefined && topic.fluency_index !== null
+                        ? `${topic.fluency_index.toFixed(0)}%`
+                        : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge
@@ -561,9 +514,6 @@ const DiagnosticResultsPage = () => {
                       >
                         {topic.status.charAt(0).toUpperCase() + topic.status.slice(1)}
                       </Badge>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {topic.questions_attempted}
                     </td>
                   </tr>
                 ))}

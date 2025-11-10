@@ -55,6 +55,7 @@ export interface AnalyzeDiagnosticResponse {
     action: string;
     rationale: string;
   }>;
+  analysis_summary?: string; // Optional summary text from Gemini
   generated_at: string;
 }
 

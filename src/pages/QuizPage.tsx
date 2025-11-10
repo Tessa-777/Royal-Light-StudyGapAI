@@ -274,7 +274,7 @@ const QuizPage = () => {
   const correctAnswer = currentQuestion.correct_answer;
   const isAnswerCorrect = selectedAnswer === correctAnswer;
   const isAnswerWrong = selectedAnswer && !isAnswerCorrect;
-  const isExplanationRequired = isAnswerWrong;
+  const isExplanationRequired = !!selectedAnswer; // Required for ALL questions now
   const explanation = currentResponse?.explanation || '';
   const isExplanationMissing = isExplanationRequired && !explanation.trim();
   const hasExplanationError = explanationErrors[currentQuestion.id] || false;
@@ -377,11 +377,11 @@ const QuizPage = () => {
       questionTimeRef.current = null;
     }
 
-    // Validate all explanations for wrong answers
+    // Validate all explanations for ALL questions
     let hasErrors = false;
     questions.forEach((q) => {
       const response = quizState.responses[q.id];
-      if (response && !response.is_correct && !response.explanation?.trim()) {
+      if (response && response.student_answer && !response.explanation?.trim()) {
         setExplanationErrors((prev) => ({
           ...prev,
           [q.id]: true,
@@ -393,7 +393,10 @@ const QuizPage = () => {
     if (hasErrors) {
       // Go to first question with error
       const firstErrorIndex = questions.findIndex(
-        (q) => quizState.responses[q.id] && !quizState.responses[q.id].is_correct && !quizState.responses[q.id].explanation?.trim()
+        (q) => {
+          const response = quizState.responses[q.id];
+          return response && response.student_answer && !response.explanation?.trim();
+        }
       );
       if (firstErrorIndex !== -1) {
         goToQuestion(firstErrorIndex);
@@ -622,14 +625,10 @@ const QuizPage = () => {
             {selectedAnswer && (
               <div>
                 <label
-                  className={`block text-sm font-medium mb-2 ${
-                    isExplanationRequired ? 'text-red-600' : 'text-gray-700'
-                  }`}
+                  className="block text-sm font-medium mb-2 text-red-600"
                 >
-                  {isExplanationRequired
-                    ? 'Explain your reasoning (required)'
-                    : 'Explain your reasoning (optional)'}
-                  {isExplanationRequired && <span className="text-red-600 ml-1">*</span>}
+                  Explain your reasoning (required)
+                  <span className="text-red-600 ml-1">*</span>
                 </label>
                 <textarea
                   value={explanation}
@@ -643,13 +642,9 @@ const QuizPage = () => {
                     }
                   `}
                   rows={3}
-                  placeholder={
-                    isExplanationRequired
-                      ? 'Explain the steps you used to solve and why you did these steps...'
-                      : 'Optional: Explain the steps you used to solve and why you did these steps...'
-                  }
+                  placeholder="Explain the steps you used to solve and why you did these steps..."
                 />
-                {!hasExplanationError && isExplanationRequired && (
+                {!hasExplanationError && (
                   <p className="text-xs text-gray-500 mt-1">
                     Please explain the steps you used to solve and why you did these steps.
                   </p>
@@ -698,7 +693,7 @@ const QuizPage = () => {
               const response = quizState.responses[q.id];
               const hasAnswer = !!response?.student_answer;
               const hasError =
-                response && !response.is_correct && !response.explanation?.trim();
+                response && response.student_answer && !response.explanation?.trim();
 
               return (
                 <button

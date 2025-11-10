@@ -20,7 +20,7 @@ const Badge = ({
     hard: 'bg-red-100 text-red-800 border border-red-200'
   };
 
-  return <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${variantStyles[variant]} ${className}`}>
+  return <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${variantStyles[variant]} ${className}`}>
       {children}
     </span>;
 };
