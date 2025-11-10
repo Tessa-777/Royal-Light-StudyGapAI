@@ -1,166 +1,200 @@
-# StudyGapAI Frontend
+Of course. I've revised and polished both of your README files.
 
-React + Vite + TailwindCSS frontend for StudyGapAI - an AI-powered diagnostic tool that identifies hidden knowledge gaps holding Nigerian JAMB students back.
+The goal was to make them clearer, more professional, and easier for a new developer or hackathon judge to understand in seconds. I've consolidated redundant information, improved the structure, and made the core AI features the star of the show.
 
-## 🚀 Features
+---
 
-- **Guest Mode**: Take diagnostic quiz without login
-- **AI-Powered Diagnostics**: Get personalized analysis of strengths and weaknesses
-- **Study Plans**: 6-week personalized study plans
-- **Progress Tracking**: Monitor improvement over time
-- **Resource Library**: Access curated learning resources
+### **Revised `README.md` for Frontend**
+
+This version is cleaner, more focused, and uses modern README conventions like badges and a table of contents. It highlights the user-facing features and directs developers to the backend for API specifics.
+
+```markdown
+# 🚀 StudyGapAI - Frontend
+
+<p align="center">
+  <img alt="React" src="https://img.shields.io/badge/React-18+-61DAFB?style=for-the-badge&logo=react&logoColor=black"/>
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-5.x-646CFF?style=for-the-badge&logo=vite&logoColor=white"/>
+  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-3.x-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white"/>
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-Auth-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white"/>
+</p>
+
+This is the official frontend for **StudyGapAI**, an AI-powered diagnostic tool that identifies the hidden, foundational knowledge gaps holding Nigerian JAMB students back. Built with React, Vite, and TailwindCSS.
+
+**➡️ Live App:** [https://Tessa-777.github.io/Royal-Light-StudyGapAI](https://Tessa-777.github.io/Royal-Light-StudyGapAI)  
+**➡️ Backend Repository:** [Link to your Backend GitHub Repo]
+
+---
+
+## ✨ Core Features
+
+- **Guest Mode Quiz:** Users can take a full diagnostic quiz without creating an account. All progress is saved locally and can be migrated after signing up.
+- **AI-Powered Diagnostics:** The core of our app. Submits quiz answers *and* student explanations to our Gemini-powered backend to get a deep analysis of strengths and weaknesses.
+- **Root Cause Analysis:** Goes beyond simple scores to identify the *foundational* reasons for mistakes (e.g., "weak in Algebra" is the root cause for failing "Calculus" questions).
+- **Personalized 6-Week Study Plans:** The AI generates a tailored, week-by-week study plan based on the diagnostic results, prioritizing foundational gaps first.
+- **Progress Tracking & Resource Library:** Dashboards with charts to monitor improvement and access to curated learning resources.
 
 ## 🛠️ Tech Stack
 
-- **Framework**: React 18+ with Vite
-- **Styling**: TailwindCSS (mobile-first)
-- **Routing**: React Router v6
-- **State Management**: React Query (TanStack Query) for server state
-- **API Client**: Axios
-- **Auth**: Supabase Auth SDK (JWT tokens)
-- **Charts**: Recharts
+- **Framework:** React 18+ with Vite
+- **Styling:** TailwindCSS (mobile-first)
+- **State Management:** TanStack Query (React Query) for server state
+- **API Client:** Axios
+- **Authentication:** Supabase Auth SDK (JWT management)
+- **Charts:** Recharts
 
-## 📦 Installation
+## 🚀 Getting Started
 
-```bash
-# Install dependencies
-npm install
+### 1. Prerequisites
 
-# Start development server
-npm run dev
+- Node.js (v18 or higher)
+- npm or yarn
 
-# Build for production
-npm run build
+### 2. Installation & Setup
 
-# Preview production build
-npm run preview
-```
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/Tessa-777/Royal-Light-StudyGapAI.git
+    cd Royal-Light-StudyGapAI
+    ```
 
-## 🔧 Environment Variables
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
 
-Create a `.env` file in the root directory:
+3.  **Set up environment variables:**
+    Create a `.env.local` file in the root and add your keys:
+    ```env
+    VITE_API_BASE_URL=http://localhost:5000/api
+    VITE_SUPABASE_URL=your_supabase_url
+    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+    ```
 
-```env
-VITE_API_BASE_URL=http://localhost:5000/api
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
+4.  **Run the development server:**
+    ```bash
+    npm run dev
+    ```
+    The app will be available at `http://localhost:5173`.
 
-## 📁 Project Structure
+## 🤖 AI Integration
 
-```
-src/
-├── components/
-│   ├── charts/          # Chart components (PieChart, BarChart, LineChart)
-│   ├── layout/          # Layout components (Header, Footer)
-│   └── ui/              # UI components (Button, Card, Input, etc.)
-├── hooks/               # Custom React hooks
-│   ├── useAuth.ts       # Authentication hook
-│   ├── useQuiz.ts       # Quiz management hook
-│   ├── useDiagnostic.ts # Diagnostic data hook
-│   ├── useResources.ts  # Resources hook
-│   └── useProgress.ts   # Progress tracking hook
-├── pages/               # Page components
-│   ├── LandingPage.tsx
-│   ├── QuizPage.tsx
-│   ├── DiagnosticResultsPage.tsx
-│   ├── StudyPlanPage.tsx
-│   ├── ProgressPage.tsx
-│   ├── ResourcesPage.tsx
-│   ├── LoginPage.tsx
-│   ├── RegisterPage.tsx
-│   └── DashboardPage.tsx
-├── services/            # API services
-│   ├── api.ts           # Axios instance
-│   ├── auth.ts          # Supabase Auth service
-│   └── endpoints.ts     # API endpoint constants
-└── lib/                 # Utility functions
-    └── utils.ts
-```
+This frontend consumes a powerful backend API that leverages **Google Gemini 2.0 Flash**. The AI is responsible for:
+- **Deep Diagnostic Analysis** of quiz results and student explanations.
+- **Generating Personalized 6-Week Study Plans**.
+- **Providing Detailed, Step-by-Step Answer Explanations**.
 
-## 🎯 Key Features
+For a complete breakdown of the AI tools used in development and in the product, see the main **[AI Acceleration Report](AI_ACCELERATION_REPORT.md)**.
 
-### Guest Mode
-- Users can take diagnostic quiz without authentication
-- Quiz data stored in localStorage
-- Users can create account later to save results
+## 📚 Project Documentation
 
-### Explanation Field Validation
-- Explanation is **REQUIRED** when answer is **WRONG**
-- Explanation is **OPTIONAL** when answer is **CORRECT**
-- Dynamic validation with error messages
-
-### Authentication
-- Supabase Auth integration
-- JWT token management
-- Protected routes
-- Save guest diagnostic after registration/login
-
-## 🚀 Deployment
-
-### GitHub Pages Deployment
-
-1. **Set GitHub Secrets** (Required): See [GitHub Pages Secrets Setup](./docs/GITHUB_PAGES_SECRETS_SETUP.md)
-2. Deploy: The GitHub Actions workflow will automatically deploy on push to `main`
-3. Enable GitHub Pages in repository settings (if not already enabled)
-4. Your app will be live at: `https://Tessa-777.github.io/Royal-Light-StudyGapAI`
-
-**Important:** If you see "Invalid API key" errors, you need to set GitHub Secrets. See the [Secrets Setup Guide](./docs/GITHUB_PAGES_SECRETS_SETUP.md).
-
-See [GitHub Pages Deployment Guide](./docs/GITHUB_PAGES_DEPLOYMENT.md) for detailed instructions.
-
-## 📝 API Integration
-
-The frontend communicates with the backend API at `VITE_API_BASE_URL`. Key endpoints:
-
-- `POST /api/ai/analyze-diagnostic` - Submit quiz and get diagnostic
-- `GET /api/quiz/questions` - Fetch quiz questions
-- `POST /api/ai/save-diagnostic` - Save guest diagnostic to account
-- `GET /api/users/me` - Get current user profile
-- `GET /api/resources` - Fetch resources by topic
-- `GET /api/topics` - Fetch all topics
-
-## 🧪 Testing
-
-```bash
-# Run linter
-npm run lint
-
-# Type checking
-npm run type-check
-```
-
-## 📚 Documentation
-
-All project documentation is organized in the [`docs/`](./docs/) folder:
-
-- **[Project Summary](./docs/PROJECT_SUMMARY.md)** - Complete project overview and current state
-- **[Implementation Summary](./docs/IMPLEMENTATION_SUMMARY.md)** - Technical implementation details
-- **[Quick Start Guide](./docs/QUICK_START.md)** - Developer quick start
-- **[GitHub Pages Deployment Guide](./docs/GITHUB_PAGES_DEPLOYMENT.md)** - Complete GitHub Pages deployment guide
-- **[Railway Backend Setup](./docs/RAILWAY_BACKEND_SETUP.md)** - Railway backend configuration
-- **[GitHub Pages Quick Steps](./GITHUB_PAGES_DEPLOYMENT_STEPS.md)** - Quick deployment steps
-- **[Troubleshooting Guide](./docs/TROUBLESHOOTING_GUIDE.md)** - Common issues and solutions
-
-### Frontend-Specific Docs
-- [Frontend Technical Specification](./front%20end%20docs/FRONTEND_TECHNICAL_SPECIFICATION.md)
-- [Repository Setup Guide](./front%20end%20docs/FRONTEND_REPOSITORY_SETUP.md)
-- [Guest Quiz Flow](./front%20end%20docs/GUEST_QUIZ_FLOW.md)
-- [Explanation Field Update](./front%20end%20docs/EXPLANATION_FIELD_UPDATE.md)
-
-See [docs/README.md](./docs/README.md) for a complete documentation index.
+All project documentation, including technical specifications and setup guides, is organized in the [`/docs`](./docs/) folder.
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+```
 
-## 📄 License
+---
 
-See LICENSE file for details.
+### **Revised `README.md` for Backend**
 
-## 🆘 Support
+This version is authoritative for the API. It clearly outlines the architecture, features, and how to set it up. It provides a clear and detailed API endpoint reference, which is crucial for any backend project.
 
-For issues and questions, please open an issue on GitHub.
+```markdown
+# 🧠 StudyGapAI - Backend API
+
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white"/>
+  <img alt="Flask" src="https://img.shields.io/badge/Flask-3.x-000000?style=for-the-badge&logo=flask&logoColor=white"/>
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white"/>
+  <img alt="Google Gemini" src="https://img.shields.io/badge/Google_Gemini-2.0_Flash-4285F4?style=for-the-badge&logo=google&logoColor=white"/>
+</p>
+
+This is the official backend for **StudyGapAI**, an AI-powered learning diagnostics platform. It combines **Flask**, **Supabase**, and the **Google Gemini API** to provide personalized analysis and study plans for Nigerian students.
+
+**➡️ Frontend Repository:** [https://github.com/Tessa-777/Royal-Light-StudyGapAI](https://github.com/Tessa-777/Royal-Light-StudyGapAI)
+
+---
+
+## ✨ Core Features
+
+- **AI-Powered Diagnostic Engine:** The core of the API. Analyzes quiz results and student explanations to identify root cause knowledge gaps.
+- **Personalized Study Plan Generation:** Creates tailored 6-week study roadmaps based on diagnostic data.
+- **Secure Authentication:** Manages user registration, login, and profiles using Supabase Auth.
+- **Comprehensive Progress Tracking:** Endpoints to store and retrieve quiz history, performance metrics, and study plan progress.
+- **RESTful API Design:** Clean, well-structured endpoints for seamless integration with any frontend client.
+
+## 🛠️ Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Framework** | Flask (Python) | Core API & Business Logic |
+| **Database** | Supabase (PostgreSQL) | Data Storage, Auth & Row-Level Security |
+| **AI Engine** | Google Gemini 2.0 Flash | Diagnostic Analysis & Plan Generation |
+| **Hosting** | Railway / Render | Deployment |
+
+## 🚀 Getting Started
+
+### 1. Prerequisites
+- Python 3.10+ and `pip`
+- A Supabase project
+- A Google AI API Key
+
+### 2. Installation & Setup
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-repo-url/StudyGapAI-Backend.git
+    cd StudyGapAI-Backend
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3.  **Set up environment variables:**
+    Create a `.env` file in the root and add your credentials:
+    ```env
+    SUPABASE_URL=https://your-project-id.supabase.co
+    SUPABASE_ANON_KEY=your-anon-key
+    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+    GOOGLE_API_KEY=your-gemini-api-key
+    ```
+
+4.  **Run database migrations:**
+    Apply the SQL migrations located in the `/supabase/migrations` directory to your Supabase project via the SQL Editor. This sets up the required tables and Row-Level Security policies.
+
+5.  **Run the development server:**
+    ```bash
+    flask run
+    ```
+    The API will be available at `http://127.0.0.1:5000`.
+
+## 🤖 The AI Engine (Google Gemini)
+
+Our API's core intelligence comes from **Google Gemini 2.0 Flash**.
+
+- **Why Gemini?** It offers the perfect balance of fast response times (3-5 seconds per analysis), low cost, and strong reasoning capabilities for the Nigerian educational context.
+- **How it Works:** We use a carefully engineered 287-line system prompt that instructs the model to perform a deep analysis and return a validated, structured JSON response. This ensures reliability and consistency for the frontend.
+
+## 🔑 API Endpoints
+
+### Authentication
+- `POST /api/users/register`: Register a new user.
+- `POST /api/users/login`: Authenticate a user and receive a JWT.
+- `GET /api/users/me`: Get the current authenticated user's profile.
+
+### AI Diagnostics & Study Plans
+- `POST /api/ai/analyze-diagnostic`: **(Core Endpoint)** Submits quiz data and student explanations. Returns a comprehensive AI-generated diagnostic report, including root cause analysis, a projected score, and a full 6-week study plan.
+- `POST /api/ai/save-diagnostic`: Saves a guest user's diagnostic results to their account after they register.
+- `POST /api/ai/explain-answer`: Get a detailed, AI-generated explanation for a specific quiz question.
+
+### Quizzes & Progress
+- `GET /api/quiz/questions`: Retrieve the list of diagnostic quiz questions.
+- `GET /api/progress/progress`: Get a user's historical performance data.
+
+## 📄 AI Acceleration Report
+
+This project was built in a hackathon timeframe using extensive AI assistance. For a complete breakdown, see our **[AI Acceleration Report](AI_ACCELERATION_REPORT.md)**.
+``````
