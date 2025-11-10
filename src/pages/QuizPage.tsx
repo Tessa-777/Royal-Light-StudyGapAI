@@ -5,14 +5,12 @@ import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import ProgressBar from '../components/ui/ProgressBar';
 import GuestModeBanner from '../components/ui/GuestModeBanner';
-import ResumeQuizModal from '../components/ui/ResumeQuizModal';
 import { useQuiz } from '../hooks/useQuiz';
 import { isAuthenticatedSync } from '../services/auth';
 
 const QuizPage = () => {
   const navigate = useNavigate();
   const [showGuestBanner, setShowGuestBanner] = useState(true);
-  const [showResumeModal, setShowResumeModal] = useState(false);
   const [quizInitialized, setQuizInitialized] = useState(false);
   const [explanationErrors, setExplanationErrors] = useState<Record<string, boolean>>({});
   const [questionStartTimes, setQuestionStartTimes] = useState<Record<string, number>>({});
@@ -37,9 +35,6 @@ const QuizPage = () => {
     goToQuestion,
     submitQuiz,
     isSubmitting,
-    hasSavedQuiz,
-    getSavedQuizProgress,
-    loadSavedQuiz,
     clearSavedQuiz,
   } = useQuiz(15); // 15 questions for diagnostic quiz
 
@@ -81,8 +76,7 @@ const QuizPage = () => {
     };
   }, [currentQuestion?.id]);
 
-  // Check for saved quiz on mount (guest mode only) - RUN ONLY ONCE
-  // CRITICAL: Only show resume modal if answeredQuestions > 0
+  // Initialize quiz on mount - always start fresh
   useEffect(() => {
     // Prevent multiple calls
     if (startQuizAttemptedRef.current) {
@@ -97,47 +91,11 @@ const QuizPage = () => {
     // Mark as attempted IMMEDIATELY to prevent re-runs
     startQuizAttemptedRef.current = true;
     
+    // Always clear any saved quiz data and start fresh
     if (isGuest && !quizInitialized) {
-      // Get saved progress - this function ONLY returns data if answeredQuestions > 0
-      const savedProgress = getSavedQuizProgress();
-      
-      // CRITICAL VALIDATION: Only show modal if:
-      // 1. savedProgress exists (means answeredQuestions > 0)
-      // 2. answeredQuestions is greater than 0 (double check)
-      if (savedProgress && savedProgress.answeredQuestions > 0) {
-        console.log('[QUIZ PAGE] ✅ Valid saved quiz found:', {
-          answeredQuestions: savedProgress.answeredQuestions,
-          currentQuestion: savedProgress.currentQuestion,
-          totalQuestions: savedProgress.totalQuestions,
-          timestamp: savedProgress.timestamp,
-        });
-        setShowResumeModal(true);
-        // Don't set quizInitialized yet - wait for user to choose resume or start fresh
-      } else {
-        // No valid saved quiz (answeredQuestions === 0 or no quiz exists)
-        console.log('[QUIZ PAGE] ℹ️ No valid saved quiz - starting fresh');
-        // Clear any invalid quiz data
-        if (localStorage.getItem('guest_quiz')) {
-          const savedQuiz = localStorage.getItem('guest_quiz');
-          try {
-            const data = JSON.parse(savedQuiz || '{}');
-            const answeredCount = Object.keys(data.responses || {}).filter(
-              (id) => {
-                const resp = data.responses[id];
-                return resp?.student_answer && ['A', 'B', 'C', 'D'].includes(resp.student_answer);
-              }
-            ).length;
-            if (answeredCount === 0) {
-              console.log('[QUIZ PAGE] Clearing invalid quiz data (0 answered questions)');
-              clearSavedQuiz();
-            }
-          } catch {
-            // Invalid data, clear it
-            clearSavedQuiz();
-          }
-        }
-        setQuizInitialized(true);
-      }
+      console.log('[QUIZ PAGE] Starting fresh quiz - clearing any saved quiz data');
+      clearSavedQuiz();
+      setQuizInitialized(true);
     } else if (!isGuest && !quizState.quizId) {
       // Authenticated user - start quiz normally (only once)
       startQuiz().catch((error) => {
@@ -150,24 +108,6 @@ const QuizPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questions?.length]);
 
-  // Handle resume quiz
-  const handleResumeQuiz = () => {
-    console.log('[QUIZ PAGE] User chose to resume quiz');
-    loadSavedQuiz();
-    setShowResumeModal(false);
-    setQuizInitialized(true);
-    startQuizAttemptedRef.current = true; // Mark as attempted
-  };
-
-  // Handle start fresh quiz
-  const handleStartFresh = () => {
-    console.log('[QUIZ PAGE] User chose to start fresh quiz');
-    clearSavedQuiz();
-    setShowResumeModal(false);
-    setQuizInitialized(true);
-    startQuizAttemptedRef.current = true; // Mark as attempted
-  };
-
   // Clear explanation error when question changes
   useEffect(() => {
     if (currentQuestion) {
@@ -178,22 +118,6 @@ const QuizPage = () => {
     }
   }, [currentQuestion?.id]);
 
-  // Get saved quiz progress ONLY when modal needs to be shown
-  // This prevents calling the function on every render
-  const savedQuizProgress = showResumeModal ? getSavedQuizProgress() : null;
-  
-  // CRITICAL SAFETY CHECK: Hide modal if progress is invalid
-  useEffect(() => {
-    if (showResumeModal && (!savedQuizProgress || savedQuizProgress.answeredQuestions === 0)) {
-      console.error('[QUIZ PAGE] ⚠️ SAFETY CHECK: Modal shown but no valid progress - hiding modal immediately');
-      setShowResumeModal(false);
-      setQuizInitialized(true);
-      // Clear invalid quiz data
-      if (localStorage.getItem('guest_quiz')) {
-        clearSavedQuiz();
-      }
-    }
-  }, [showResumeModal, savedQuizProgress, clearSavedQuiz]);
 
   // Show loading state if questions are still loading
   if (questionsLoading) {
@@ -205,30 +129,6 @@ const QuizPage = () => {
           <p className="text-gray-600">Loading questions...</p>
         </div>
       </div>
-    );
-  }
-
-  // Show resume modal ONLY if:
-  // 1. Modal should be shown
-  // 2. Valid progress exists
-  // 3. answeredQuestions > 0 (CRITICAL - never show with 0 answers)
-  if (showResumeModal && savedQuizProgress && savedQuizProgress.answeredQuestions > 0) {
-    return (
-      <>
-        <ResumeQuizModal
-          isOpen={showResumeModal}
-          onResume={handleResumeQuiz}
-          onStartFresh={handleStartFresh}
-          quizProgress={savedQuizProgress}
-        />
-        {/* Show loading state behind modal */}
-        <div className="min-h-screen bg-gray-50 py-8 px-4 flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading quiz...</p>
-          </div>
-        </div>
-      </>
     );
   }
 
