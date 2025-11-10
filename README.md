@@ -1,14 +1,3 @@
-Of course. I've revised and polished both of your README files.
-
-The goal was to make them clearer, more professional, and easier for a new developer or hackathon judge to understand in seconds. I've consolidated redundant information, improved the structure, and made the core AI features the star of the show.
-
----
-
-### **Revised `README.md` for Frontend**
-
-This version is cleaner, more focused, and uses modern README conventions like badges and a table of contents. It highlights the user-facing features and directs developers to the backend for API specifics.
-
-```markdown
 # 🚀 StudyGapAI - Frontend
 
 <p align="center">
@@ -197,4 +186,3 @@ Our API's core intelligence comes from **Google Gemini 2.0 Flash**.
 ## 📄 AI Acceleration Report
 
 This project was built in a hackathon timeframe using extensive AI assistance. For a complete breakdown, see our **[AI Acceleration Report](AI_ACCELERATION_REPORT.md)**.
-``````
