@@ -1,4 +1,6 @@
-# 🚀 StudyGapAI - Frontend
+# 🚀 StudyGapAI 
+
+## 🥇 1st Place Winner - WUD AI Hackathon 2025**
 
 <p align="center">
   <img alt="React" src="https://img.shields.io/badge/React-18+-61DAFB?style=for-the-badge&logo=react&logoColor=black"/>
